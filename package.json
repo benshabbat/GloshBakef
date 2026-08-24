@@ -1,0 +1,27 @@
+{
+  "name": "gloshbakef",
+  "version": "1.0.0",
+  "description": "תוסף Chrome פשוט שמסתיר תמונות חשודות באופן מקומי לפי טקסט שמופיע בכתובת התמונה, ב-`alt`, בכותרת או בקישור העוטף אותה.",
+  "main": "content.js",
+  "scripts": {
+    "build": "esbuild content.js --bundle --format=iife --target=chrome120 --outfile=content.bundle.js",
+    "check": "node --check content.bundle.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benshabbat/GloshBakef.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/benshabbat/GloshBakef/issues"
+  },
+  "homepage": "https://github.com/benshabbat/GloshBakef#readme",
+  "devDependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "esbuild": "^0.28.2",
+    "nsfwjs": "^4.3.0"
+  }
+}
