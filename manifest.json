@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "מסנן תמונות",
+  "version": "1.0.0",
+  "description": "מסנן תמונות חשודות בדפדפן באופן מקומי.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "הגדרות מסנן תמונות",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.bundle.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {}
+}
