@@ -14,7 +14,7 @@ description: Cutting a release and packaging for the Chrome Web Store — versio
 ## The gate
 
 ```
-npm run check     # manifest paths, page assets, syntax — catches "Chrome refuses to load the extension"
+npm run check     # manifest paths, page assets, syntax, then the test suite
 npm run build     # minified bundles into dist/
 ```
 

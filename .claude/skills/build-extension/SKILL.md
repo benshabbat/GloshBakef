@@ -29,7 +29,8 @@ Everything else is loaded directly by Chrome and needs **no build**, only an ext
 ```
 npm run build     # icons + both bundles
 npm run dev       # same, then esbuild watch mode
-npm run check     # manifest paths, HTML asset refs, and syntax across src/ and scripts/
+npm run check     # manifest paths, HTML asset refs, syntax across src/ and scripts/, then npm test
+npm test          # the pure-logic assertions in scripts/test.mjs, on bare Node
 npm run icons     # regenerate icons/*.png only
 ```
 

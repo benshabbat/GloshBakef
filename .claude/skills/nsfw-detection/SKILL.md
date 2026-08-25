@@ -22,7 +22,9 @@ Then in `onVisible()`: **rendered size < `minImageSize`** → allow. An image th
 
 ## Stage 1 — text
 
-`textAround()` joins `alt`, `title`, `aria-label`, the effective `src` and the wrapping `<a href>`, lowercases, and turns runs of `._/?=&+%#-` into spaces.
+`textAround()` in the content script joins `alt`, `title`, `aria-label`, the effective `src` and the wrapping `<a href>`. The matching itself lives in [src/shared/keywords.js](../../../src/shared/keywords.js) — `normalizeText()` lowercases and turns runs of `._/?=&+%#-` into spaces, `compileKeywords()` builds the pattern, `matchesKeyword()` applies it.
+
+It sits in `shared/` rather than in the content script so `npm test` can exercise it directly. Add an assertion there for any change to it: this is the layer whose failure mode (hiding innocent images) the user sees.
 
 Matching is a **single compiled regex** with Unicode letter boundaries:
 

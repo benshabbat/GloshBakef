@@ -25,7 +25,7 @@ Settings have exactly one home: `SETTINGS` in [src/shared/settings.js](../../../
 
 **6. Check the worker side.** If the setting changes *what the worker registers or caches*, add it to `syncPreblur` (like `hideUntilChecked` and `allowlist`) or account for it where the score cache is read. The cache stores raw class vectors precisely so that threshold-like settings need no invalidation — keep new scoring settings on that side of the line rather than baking verdicts into the cache.
 
-**7. Rebuild.** `src/shared/` is compiled into both bundles *and* loaded raw by the worker and UI. Skipping `npm run build` leaves the two halves of the extension disagreeing, silently. Then `npm run check`.
+**7. Test and rebuild.** `migrate()` is covered by `scripts/test.mjs` — add assertions for the new key's default, its sanitization, and any old value it maps from. Then `npm run build`: `src/shared/` is compiled into both bundles *and* loaded raw by the worker and UI, so skipping it leaves the two halves of the extension disagreeing, silently. Finish with `npm run check`.
 
 **8. Test it live.** Open a page, change the setting in the options tab, and watch the page react without a reload. That round trip — options page → `storage.sync` → `onChanged` → every frame and the worker — is the whole point of the architecture and the thing most likely to be miswired.
 

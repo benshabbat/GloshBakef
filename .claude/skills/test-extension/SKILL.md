@@ -1,9 +1,19 @@
 ---
 name: test-extension
-description: Manually exercise the filter in Chrome across its three runtime contexts — page, service worker, offscreen document. Covers where each log lands, how to inspect verdicts, and the paths worth walking before calling a change done. Use when asked to test, verify, or reproduce a bug. There is no automated test suite.
+description: Verifying a change — what `npm test` covers and what only a browser can, plus how to exercise the filter across its three runtime contexts (page, service worker, offscreen document). Use when asked to test, verify, or reproduce a bug.
 ---
 
 # Testing
+
+## What the test suite covers
+
+`npm test` (`scripts/test.mjs`, no framework, bare Node) exercises the **pure logic** in `src/shared/`: keyword compilation and matching, `riskScore`, the allowlist, hostname parsing, and settings migration. `npm run check` runs it after the manifest/asset/syntax check, so `npm run check` is the single gate before a commit.
+
+A change to `src/shared/keywords.js` or `settings.js` should come with an assertion in `scripts/test.mjs` — that layer is where a subtle mistake silently hides innocent images.
+
+Everything else — the state machine, observers, messaging, the offscreen document, CSS — needs a real browser. It has no automated coverage, so the walkthrough below is not optional for those paths.
+
+## In the browser
 
 Build first (`npm run check && npm run build`), then `chrome://extensions` → Developer mode → **Load unpacked**.
 
