@@ -1,0 +1,9 @@
+body { width: 288px; }
+main { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+header { display: flex; flex-direction: column; gap: 2px; }
+#tab-summary { min-height: 18px; }
+#hostname { direction: ltr; unicode-bidi: isolate; text-align: start; word-break: break-all; }
+.actions { display: flex; flex-direction: column; gap: 8px; }
+.actions button { width: 100%; }
+main[data-disabled="true"] .card:not(:first-of-type),
+main[data-disabled="true"] .actions #reveal { opacity: .45; pointer-events: none; }

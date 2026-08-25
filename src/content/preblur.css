@@ -1,0 +1,10 @@
+/* Registered dynamically by the service worker, only while "hide until checked" is on.
+   Registering it rather than shipping it in the manifest means it is present before the
+   first paint, so nothing is ever visible before the filter has had a look at it. */
+
+:root:not([data-imgfilter-off]) img:not([data-imgfilter]),
+:root:not([data-imgfilter-off]) img[data-imgfilter="pending"],
+:root:not([data-imgfilter-off]) video:not([data-imgfilter]),
+:root:not([data-imgfilter-off]) video[data-imgfilter="pending"] {
+  filter: blur(12px) !important;
+}
