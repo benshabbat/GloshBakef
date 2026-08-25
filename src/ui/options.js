@@ -15,8 +15,16 @@ const TOGGLES = [
   "clickToReveal",
   "analyzeContent",
   "includeSuggestive",
-  "scanBackgrounds"
+  "scanBackgrounds",
+  "analyzeVideos",
+  "pauseBlockedVideos"
 ];
+
+/** id -> [min, max], for the plain integer inputs. */
+const NUMBERS = {
+  minImageSize: [0, 1000],
+  videoSampleSeconds: [1, 60]
+};
 
 const el = (id) => document.querySelector(`#${id}`);
 const status = el("status");
@@ -40,16 +48,17 @@ function fill(settings) {
   for (const id of TOGGLES) el(id).checked = Boolean(settings[id]);
   el("threshold").value = settings.threshold;
   el("threshold-value").textContent = settings.threshold.toFixed(2);
-  el("minImageSize").value = settings.minImageSize;
+  for (const id of Object.keys(NUMBERS)) el(id).value = settings[id];
   el("keywords").value = settings.keywords.join(", ");
   el("allowlist").value = settings.allowlist.join("\n");
 }
 
 async function refreshStats() {
   const stats = await readStats();
+  // Counts checks, not elements: a playing video is checked again every few seconds.
   el("stats").textContent = stats.analyzedTotal
-    ? `נבדקו ${stats.analyzedTotal.toLocaleString("he-IL")} תמונות, מתוכן ${stats.blockedTotal.toLocaleString("he-IL")} הוסתרו.`
-    : "עדיין לא נבדקו תמונות.";
+    ? `בוצעו ${stats.analyzedTotal.toLocaleString("he-IL")} בדיקות תוכן, ומתוכן ${stats.blockedTotal.toLocaleString("he-IL")} הובילו להסתרה.`
+    : "עדיין לא בוצעו בדיקות תוכן.";
 }
 
 /** Textareas save while typing, but only once the user pauses. */
@@ -70,11 +79,14 @@ el("threshold").addEventListener("input", () => {
 });
 el("threshold").addEventListener("change", () => save({ threshold: Number(el("threshold").value) }));
 
-el("minImageSize").addEventListener("change", () => {
-  const value = Math.max(0, Math.min(1000, Math.round(Number(el("minImageSize").value) || 0)));
-  el("minImageSize").value = value;
-  save({ minImageSize: value });
-});
+for (const [id, [min, max]] of Object.entries(NUMBERS)) {
+  el(id).addEventListener("change", () => {
+    // Snap the box back to what was actually stored, so it never shows a rejected value.
+    const value = Math.max(min, Math.min(max, Math.round(Number(el(id).value) || min)));
+    el(id).value = value;
+    save({ [id]: value });
+  });
+}
 
 el("keywords").addEventListener(
   "input",

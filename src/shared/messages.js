@@ -1,6 +1,10 @@
 /** Message names shared by the content script, the service worker and the offscreen document. */
 export const MSG = {
-  /** content script -> worker: score one image URL. */
+  /**
+   * content script -> worker: score one image URL, optionally with pixels attached.
+   * `cache: false` opts a payload out of the URL cache — video frames use it, since the
+   * picture behind a video URL is different every time it is sampled.
+   */
   SCORE: "score-image",
   /** worker -> offscreen document: run the model. */
   SCORE_OFFSCREEN: "score-image-offscreen",

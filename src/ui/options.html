@@ -86,6 +86,34 @@
     </section>
 
     <section class="card">
+      <h2>סרטונים</h2>
+
+      <div class="row">
+        <div class="label">
+          <label for="analyzeVideos">בדיקת התמונה בסרטון</label>
+          <span class="hint" id="analyzeVideos-hint">בודק את מה שהסרטון באמת מציג בזמן הניגון, ולא רק את תמונת התצוגה המקדימה שלו.</span>
+        </div>
+        <input id="analyzeVideos" type="checkbox" aria-describedby="analyzeVideos-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="videoSampleSeconds">תדירות הבדיקה</label>
+          <span class="hint" id="videoSampleSeconds-hint">כל כמה שניות נבדק שוב סרטון שמתנגן על המסך. ערך נמוך מגיב מהר יותר ומעמיס יותר.</span>
+        </div>
+        <input id="videoSampleSeconds" type="number" min="1" max="60" step="1" aria-describedby="videoSampleSeconds-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="pauseBlockedVideos">השהיית סרטון שהוסתר</label>
+          <span class="hint" id="pauseBlockedVideos-hint">משהה ומשתיק סרטון שהוסתר, כדי שהפסקול לא ימשיך להתנגן מאחורי הטשטוש. חשיפה מחזירה את הניגון.</span>
+        </div>
+        <input id="pauseBlockedVideos" type="checkbox" aria-describedby="pauseBlockedVideos-hint">
+      </div>
+    </section>
+
+    <section class="card">
       <h2><label for="keywords">מילות חסימה</label></h2>
       <p class="hint" id="keywords-hint">מופרדות בפסיקים או בשורות. תמונה תוסתר מיד אם אחת מהן מופיעה בכתובת, ב־<code>alt</code>, בכותרת או בקישור העוטף.</p>
       <textarea id="keywords" rows="5" spellcheck="false" aria-describedby="keywords-hint"></textarea>

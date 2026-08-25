@@ -45,8 +45,8 @@ function render(blocked) {
   if (!settings.enabled) els.summary.textContent = "המסנן מושהה.";
   else if (!hostname) els.summary.textContent = "אין דף פעיל לסינון.";
   else if (!active) els.summary.textContent = "האתר הזה ברשימת ההיתר.";
-  else if (blocked > 0) els.summary.textContent = `${blocked} תמונות מוסתרות בלשונית הזו.`;
-  else els.summary.textContent = "לא הוסתרו תמונות בלשונית הזו.";
+  else if (blocked > 0) els.summary.textContent = `${blocked} תמונות וסרטונים מוסתרים בלשונית הזו.`;
+  else els.summary.textContent = "לא הוסתר דבר בלשונית הזו.";
 }
 
 async function refresh() {

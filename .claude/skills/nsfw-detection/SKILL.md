@@ -15,8 +15,11 @@ Split across three contexts. [src/content/index.js](../../../src/content/index.j
 2. **No `src` yet** → wait for `load`, then re-evaluate.
 3. **Intrinsic size < `minImageSize`** → allow (icons, tracking pixels, sprites).
 4. **`analyzeContent` off** → allow (keyword-only mode).
-5. **Not decoded yet** → wait for `load`, then re-evaluate.
-6. Otherwise → `IntersectionObserver`, and score only once it nears the viewport.
+5. **A `<video>`** → its own branch, below.
+6. **Not decoded yet** → wait for `load`, then re-evaluate.
+7. Otherwise → `IntersectionObserver`, and score only once it nears the viewport.
+
+Gate 2 is skipped for videos: MSE and `<source>` children both leave `src` empty on a perfectly real video, so an empty source is only a reason to wait for an `<img>`.
 
 Then in `onVisible()`: **rendered size < `minImageSize`** → allow. An image that is intrinsically large but displayed at 20px is UI chrome.
 
@@ -63,6 +66,18 @@ Two tiers, because one alone does not cover the web:
 
 A tier-1 miss is cached as `null`, so the next sighting of that URL goes straight to tier 2.
 
+## Videos
+
+A video is not one picture. Its poster is a still someone chose, and what it shows changes as it plays — so `scoreVideo()` judges it on **its own frames**, and keeps judging.
+
+- `sampleVideo()` draws the element once `readyState >= HAVE_CURRENT_DATA` (2) and sends the frame as pixels. Tier 1 never applies: there is no URL that returns "the frame playing right now", and fetching a video URL would download the movie.
+- No readable frame — DRM, or a tainted cross-origin video — falls back to scoring `element.poster` as an ordinary image URL. The poster has no pixel fallback of its own: drawing the element would give a frame, not the poster.
+- Frame requests carry **`cache: false`**. The worker's cache is keyed by URL, and a video URL returns a different picture every few seconds; caching a frame verdict under it would answer the next question with the last frame's answer. This is the one thing to get right when touching this path.
+- A cleared video joins `liveVideos` and is re-sampled every `videoSampleSeconds` while it is **playing and on screen**. `play` and `seeked` sample immediately (floored by `MIN_SAMPLE_GAP_MS`); `emptied` re-evaluates from scratch, because MSE swaps the movie without touching any attribute.
+- Re-sampling only ever *blocks*. It never un-blocks, so the blur cannot flicker, and it skips anything not `safe` — which is what makes a user's reveal stick.
+- After `MAX_VIDEO_MISSES` unreadable looks in a row the sampler drops the video: DRM never becomes readable, and one failed round-trip to a sleeping worker should not be permanent.
+- Blocking a video also **pauses and mutes** it (`silence()`), stashing `{ muted, paused }` first; `restorePlayback()` puts it back on reveal, teardown or a settings change. A blur says nothing about a soundtrack. `play()` on reveal can be refused by autoplay policy outside a user gesture — that is caught and ignored.
+
 This replaces v1's `classify(imgElement)`, which drew a cross-origin `<img>` into a canvas, tainted it, and threw `SecurityError` on most of the web.
 
 ## Failure modes
@@ -78,6 +93,7 @@ Inference is off the page's main thread entirely — it happens in the offscreen
 - `MAX_CONCURRENT = 3` in the worker caps parallel inference.
 - The `classCache` (LRU, 3000 entries) means a repeated image across tabs is scored once.
 - `IntersectionObserver` with a 400px margin means offscreen images are never scored.
+- The video sampler is the one *recurring* cost in the extension. It is bounded on four sides: only videos that are playing, on screen, cleared and readable stay in `liveVideos`, and the interval is a user setting. Scrolling a video away or pausing it stops it; nothing re-checks a video in the background.
 - The offscreen document closes after 5 minutes idle, freeing the model and its GPU textures.
 
 ## Hiding
