@@ -14,3 +14,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# build output
+dist/

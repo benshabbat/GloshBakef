@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>מסנן תמונות</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>מסנן תמונות</h1>
+      <p id="tab-summary" class="hint" role="status">טוען…</p>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <div class="label">
+          <label for="enabled">המסנן פעיל</label>
+        </div>
+        <input id="enabled" type="checkbox">
+      </div>
+      <div class="row">
+        <div class="label">
+          <label for="site-enabled">סינון באתר הזה</label>
+          <span id="hostname" class="hint"></span>
+        </div>
+        <input id="site-enabled" type="checkbox" aria-describedby="hostname">
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 id="sensitivity-label">רמת חומרה</h2>
+      <div class="segmented" id="sensitivity" role="group" aria-labelledby="sensitivity-label">
+        <button type="button" data-preset="relaxed" aria-pressed="false">מקל</button>
+        <button type="button" data-preset="balanced" aria-pressed="false">מאוזן</button>
+        <button type="button" data-preset="strict" aria-pressed="false">מחמיר</button>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="reveal" type="button">חשיפת כל התמונות בדף</button>
+      <button id="settings" type="button" class="primary">הגדרות מתקדמות</button>
+    </div>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+:root {
+  --bg: #f6f3ed;
+  --surface: #fffdf8;
+  --border: #ddd5c6;
+  --text: #20231f;
+  --muted: #6b6a63;
+  --accent: #315d4b;
+  --accent-strong: #244838;
+  --accent-soft: #e4ece7;
+  --radius: 10px;
+  color-scheme: light dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1e1c;
+    --surface: #242825;
+    --border: #3a403b;
+    --text: #ecebe6;
+    --muted: #a3a69f;
+    --accent: #6fae92;
+    --accent-strong: #8cc7ab;
+    --accent-soft: #2b3630;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 13px; margin: 0 0 4px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+
+a { color: var(--accent); }
+
+button {
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex: none;
+  cursor: pointer;
+}
+
+input[type="number"], textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+/* The keyword and allowlist boxes hold Latin words inside an RTL page. */
+textarea { width: 100%; resize: vertical; direction: ltr; text-align: start; }
+
+input[type="range"] { accent-color: var(--accent); width: 100%; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.row + .row { margin-top: 12px; }
+
+.row .label { display: flex; flex-direction: column; gap: 2px; }
+.row .label label { cursor: pointer; }
+.hint { color: var(--muted); font-size: 12px; }
+
+/* Latin fragments inside Hebrew sentences: isolate them so the bidi algorithm cannot
+   drag neighbouring punctuation across the boundary. */
+code, .ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.segmented { display: flex; gap: 0; }
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+  border-inline-start-width: 0;
+}
+.segmented button:first-child {
+  border-start-start-radius: var(--radius);
+  border-end-start-radius: var(--radius);
+  border-inline-start-width: 1px;
+}
+.segmented button:last-child {
+  border-start-end-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
+}

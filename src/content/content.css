@@ -1,0 +1,41 @@
+/* Injected into every frame at document_start. Only styles elements the content
+   script has explicitly tagged, so it is inert until a verdict exists. */
+
+img[data-imgfilter="blocked"],
+video[data-imgfilter="blocked"] {
+  filter: blur(28px) grayscale(1) !important;
+  opacity: 0.35 !important;
+  outline: 2px dashed rgba(49, 93, 75, 0.75) !important;
+  outline-offset: -2px !important;
+  background-color: #e7e2d8 !important;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(49, 93, 75, 0.14) 0 10px,
+    rgba(49, 93, 75, 0) 10px 20px
+  ) !important;
+  cursor: pointer !important;
+}
+
+[data-imgfilter-bg="blocked"] {
+  filter: blur(28px) grayscale(1) !important;
+}
+
+img[data-imgfilter="revealed"],
+video[data-imgfilter="revealed"],
+[data-imgfilter-bg="revealed"] {
+  filter: none !important;
+  opacity: 1 !important;
+  outline: none !important;
+}
+
+img[data-imgfilter],
+video[data-imgfilter] {
+  transition: filter 140ms ease, opacity 140ms ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  img[data-imgfilter],
+  video[data-imgfilter] {
+    transition: none !important;
+  }
+}

@@ -1,20 +1,23 @@
 {
   "name": "gloshbakef",
-  "version": "1.0.0",
-  "description": "תוסף Chrome פשוט שמסתיר תמונות חשודות באופן מקומי לפי טקסט שמופיע בכתובת התמונה, ב-`alt`, בכותרת או בקישור העוטף אותה.",
-  "main": "content.js",
+  "version": "2.0.0",
+  "description": "תוסף Chrome שמסתיר תמונות בעייתיות. הניתוח כולו מקומי: היוריסטיקת מילות חסימה ומודל NSFW שרץ במסמך offscreen יחיד.",
+  "type": "module",
+  "private": true,
   "scripts": {
-    "build": "esbuild content.js --bundle --format=iife --target=chrome120 --outfile=content.bundle.js",
-    "check": "node --check content.bundle.js"
+    "build": "node scripts/make-icons.mjs && node scripts/build.mjs",
+    "dev": "node scripts/make-icons.mjs && node scripts/build.mjs --watch",
+    "icons": "node scripts/make-icons.mjs",
+    "test": "node scripts/test.mjs",
+    "check": "node scripts/check.mjs && node scripts/test.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/benshabbat/GloshBakef.git"
   },
-  "keywords": [],
+  "keywords": ["chrome-extension", "content-filter", "nsfw", "manifest-v3", "on-device"],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/benshabbat/GloshBakef/issues"
   },

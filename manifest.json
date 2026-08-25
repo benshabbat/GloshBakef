@@ -1,20 +1,40 @@
 {
   "manifest_version": 3,
   "name": "מסנן תמונות",
-  "version": "1.0.0",
-  "description": "מסנן תמונות חשודות בדפדפן באופן מקומי.",
-  "permissions": ["storage"],
-  "action": {
-    "default_title": "הגדרות מסנן תמונות",
-    "default_popup": "popup.html"
+  "version": "2.0.0",
+  "description": "מסתיר תמונות בעייתיות בדפדפן. כל הניתוח מתבצע מקומית, ללא שליחת תמונות לשום שרת.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "scripting", "offscreen", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background/index.js",
+    "type": "module"
   },
-  "options_page": "options.html",
+  "action": {
+    "default_title": "מסנן תמונות",
+    "default_popup": "src/ui/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_page": "src/ui/options.html",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.bundle.js"],
-      "run_at": "document_idle"
+      "js": ["dist/content.js"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
-  "icons": {}
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

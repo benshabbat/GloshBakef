@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>הגדרות מסנן תמונות</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>הגדרות מסנן תמונות</h1>
+      <p class="hint">כל הניתוח רץ במחשב שלכם. שום תמונה לא נשלחת לשרת חיצוני.</p>
+      <p id="status" class="saved" role="status" aria-live="polite"></p>
+    </header>
+
+    <section class="card">
+      <h2>כללי</h2>
+
+      <div class="row">
+        <div class="label">
+          <label for="enabled">המסנן פעיל</label>
+          <span class="hint" id="enabled-hint">כיבוי מבטל את הסינון בכל האתרים.</span>
+        </div>
+        <input id="enabled" type="checkbox" aria-describedby="enabled-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="hideUntilChecked">הסתרה עד לבדיקה</label>
+          <span class="hint" id="hideUntilChecked-hint">מטשטש תמונות מרגע טעינת הדף, כדי שדבר לא ייחשף לפני הבדיקה.</span>
+        </div>
+        <input id="hideUntilChecked" type="checkbox" aria-describedby="hideUntilChecked-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="clickToReveal">חשיפה בלחיצה</label>
+          <span class="hint" id="clickToReveal-hint">לחיצה על תמונה מוסתרת חושפת אותה עד סוף הגלישה בדף.</span>
+        </div>
+        <input id="clickToReveal" type="checkbox" aria-describedby="clickToReveal-hint">
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>ניתוח תוכן</h2>
+
+      <div class="row">
+        <div class="label">
+          <label for="analyzeContent">ניתוח תוכן התמונה</label>
+          <span class="hint" id="analyzeContent-hint">מריץ מודל מקומי על כל תמונה שנכנסת למסך, בנוסף לבדיקת מילות החסימה.</span>
+        </div>
+        <input id="analyzeContent" type="checkbox" aria-describedby="analyzeContent-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="includeSuggestive">לכלול תוכן רומז</label>
+          <span class="hint" id="includeSuggestive-hint">מחשיב גם בגדי ים והלבשה תחתונה כתוכן לחסימה.</span>
+        </div>
+        <input id="includeSuggestive" type="checkbox" aria-describedby="includeSuggestive-hint">
+      </div>
+
+      <div class="stack">
+        <label for="threshold">סף חסימה: <output id="threshold-value" for="threshold"></output></label>
+        <span class="hint" id="threshold-hint">ערך נמוך חוסם יותר ומרבה בטעויות. ערך גבוה חוסם פחות.</span>
+        <input id="threshold" type="range" min="0.2" max="0.95" step="0.05" aria-describedby="threshold-hint">
+        <div class="scale" aria-hidden="true"><span>מחמיר</span><span>מאוזן</span><span>מקל</span></div>
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="minImageSize">גודל תמונה מזערי</label>
+          <span class="hint" id="minImageSize-hint">תמונות קטנות מכך (בפיקסלים) נחשבות אייקונים ואינן נבדקות.</span>
+        </div>
+        <input id="minImageSize" type="number" min="0" max="1000" step="8" aria-describedby="minImageSize-hint">
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <label for="scanBackgrounds">לבדוק גם רקעי CSS</label>
+          <span class="hint" id="scanBackgrounds-hint">מרחיב את בדיקת מילות החסימה לתמונות רקע. מאט מעט דפים גדולים.</span>
+        </div>
+        <input id="scanBackgrounds" type="checkbox" aria-describedby="scanBackgrounds-hint">
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><label for="keywords">מילות חסימה</label></h2>
+      <p class="hint" id="keywords-hint">מופרדות בפסיקים או בשורות. תמונה תוסתר מיד אם אחת מהן מופיעה בכתובת, ב־<code>alt</code>, בכותרת או בקישור העוטף.</p>
+      <textarea id="keywords" rows="5" spellcheck="false" aria-describedby="keywords-hint"></textarea>
+      <button id="reset-keywords" type="button">שחזור רשימת ברירת המחדל</button>
+    </section>
+
+    <section class="card">
+      <h2><label for="allowlist">אתרים ללא סינון</label></h2>
+      <p class="hint" id="allowlist-hint">שם מארח בכל שורה. <code>example.com</code> מכסה גם את <code>www.example.com</code>.</p>
+      <textarea id="allowlist" rows="4" spellcheck="false" placeholder="example.com" aria-describedby="allowlist-hint"></textarea>
+    </section>
+
+    <section class="card">
+      <h2>סטטיסטיקה</h2>
+      <p id="stats" class="hint"></p>
+      <div class="buttons">
+        <button id="reset-stats" type="button">איפוס המונים</button>
+        <button id="reset-all" type="button">איפוס כל ההגדרות</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
