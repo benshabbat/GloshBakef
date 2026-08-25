@@ -23,6 +23,12 @@ export const SETTINGS = {
   keywords: DEFAULT_KEYWORDS,
   /** Run the local neural model, not just the keyword heuristic. */
   analyzeContent: true,
+  /** Inspect the frames a video actually shows, not only its poster still. */
+  analyzeVideos: true,
+  /** Seconds between two checks of the same video while it plays on screen. */
+  videoSampleSeconds: 5,
+  /** Pause and mute a hidden video, so its soundtrack does not play on behind the blur. */
+  pauseBlockedVideos: true,
   /** Count the model's "Sexy" class (swimwear, lingerie) towards the risk score. */
   includeSuggestive: true,
   /** Blur every image from the first paint until it has been cleared. */
@@ -69,6 +75,12 @@ export function migrate(stored) {
   }
   settings.threshold = clamp(Number(settings.threshold) || SETTINGS.threshold, 0.2, 0.99);
   settings.minImageSize = clamp(Math.round(Number(settings.minImageSize) || 0), 0, 1000);
+  // A zero here would busy-loop the sampler, so it falls back to the default rather than to 0.
+  settings.videoSampleSeconds = clamp(
+    Math.round(Number(settings.videoSampleSeconds) || SETTINGS.videoSampleSeconds),
+    1,
+    60
+  );
   settings.keywords = Array.isArray(settings.keywords) ? settings.keywords : [];
   settings.allowlist = Array.isArray(settings.allowlist) ? settings.allowlist : [];
   return settings;

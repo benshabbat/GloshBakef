@@ -118,10 +118,15 @@ async function runModel(url, dataUrl, attempt = 0) {
   }
 }
 
-async function scoreImage(url, dataUrl) {
+/**
+ * `cache: false` is what a video frame asks for: the picture behind that URL changes from
+ * one sample to the next, so caching it by URL would answer the next question with the
+ * previous frame's verdict.
+ */
+async function scoreImage({ url, dataUrl, cache = true }) {
   const settings = await getSettings();
 
-  if (!dataUrl) {
+  if (!dataUrl && cache) {
     const cached = cacheGet(url);
     if (cached !== undefined) {
       return cached
@@ -137,11 +142,11 @@ async function scoreImage(url, dataUrl) {
     // Remember the miss so the next sighting skips straight to the pixel path, and ask
     // the frame for pixels: it can read same-origin, CORS-clean and blob: images that
     // the extension origin cannot fetch on its own.
-    cacheSet(url, null);
+    if (cache) cacheSet(url, null);
     return { score: UNKNOWN_SCORE, needsPixels: true };
   }
 
-  cacheSet(url, classes);
+  if (cache) cacheSet(url, classes);
   const score = riskScore(classes, settings);
   recordStats(score, settings);
   return { score };
@@ -237,9 +242,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.target === "offscreen") return false; // meant for the offscreen document
 
   if (message?.type === MSG.SCORE) {
-    scoreImage(message.url, message.dataUrl).then(sendResponse, () =>
-      sendResponse({ score: UNKNOWN_SCORE })
-    );
+    scoreImage(message).then(sendResponse, () => sendResponse({ score: UNKNOWN_SCORE }));
     return true;
   }
 

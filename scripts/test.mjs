@@ -12,6 +12,7 @@ import {
   parseKeywords,
   toMatchPattern,
   migrate,
+  SETTINGS,
   SENSITIVITY_PRESETS,
   DEFAULT_KEYWORDS
 } from "../src/shared/settings.js";
@@ -117,6 +118,21 @@ check("out-of-range threshold is clamped", migrate({ threshold: 99 }).threshold,
 check("garbage threshold falls back", migrate({ threshold: "nope" }).threshold, SENSITIVITY_PRESETS.balanced);
 check("non-array keywords are replaced", migrate({ keywords: "porn" }).keywords, []);
 check("defaults survive an empty store", migrate({}).keywords, DEFAULT_KEYWORDS);
+
+/* ---------------------------------------------------------------------- videos */
+
+group("video settings");
+check("frame sampling is on by default", migrate({}).analyzeVideos, true);
+check("hidden videos pause by default", migrate({}).pauseBlockedVideos, true);
+check("sample interval default", migrate({}).videoSampleSeconds, SETTINGS.videoSampleSeconds);
+check("an explicit interval is kept", migrate({ videoSampleSeconds: 12 }).videoSampleSeconds, 12);
+check("a fractional interval is rounded", migrate({ videoSampleSeconds: 2.6 }).videoSampleSeconds, 3);
+check("an over-long interval is clamped", migrate({ videoSampleSeconds: 999 }).videoSampleSeconds, 60);
+// Zero would turn the sampler into a busy loop, so it must never survive migration.
+check("zero falls back to the default", migrate({ videoSampleSeconds: 0 }).videoSampleSeconds, SETTINGS.videoSampleSeconds);
+check("a negative interval is clamped", migrate({ videoSampleSeconds: -5 }).videoSampleSeconds, 1);
+check("garbage falls back to the default", migrate({ videoSampleSeconds: "soon" }).videoSampleSeconds, SETTINGS.videoSampleSeconds);
+check("an upgrading user keeps video checks on", migrate({ sensitivity: "strict" }).analyzeVideos, true);
 
 /* ---------------------------------------------------------------------- report */
 

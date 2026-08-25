@@ -13,7 +13,9 @@ description: What the filter can and cannot see on a real page — the DOM surfa
 | --- | --- | --- |
 | `<img>` | yes | directly |
 | `<picture>` / `srcset` | yes | `currentSrc` is the resolved source, and `srcset` is in the observed attribute list |
-| `<video>` poster | yes | `sourceOf()` returns `element.poster`; video **frames** are not inspected |
+| `<video>` frames | yes | the element is drawn to a canvas once it has data, and re-sampled every `videoSampleSeconds` while it plays on screen |
+| `<video>` poster | yes | the fallback when no frame can be read; `posterOf()` |
+| MSE / `blob:` video (the big video sites) | yes | media the page assembled itself is origin-clean, so the canvas is not tainted |
 | Lazy-loaded images | yes | a one-shot `load`/`loadedmetadata`/`error` listener re-evaluates |
 | SPA source swaps | yes | `MutationObserver` with `attributeFilter: ["src","srcset","poster","alt","title"]`, and `evaluate()` short-circuits unless the effective source really changed |
 | `blob:` / `data:` URLs | yes | routed straight to the canvas-snapshot path |
@@ -28,7 +30,9 @@ These are not bugs to fix casually — each needs a real design decision:
 - **`<canvas>` pixels.** Anything drawn to a canvas, including images a page decodes itself.
 - **SVG `<image>`.** An `SVGImageElement` does not match `img`.
 - **`<object>` / `<embed>`.** Never inspected.
-- **Video content.** Only the poster frame is considered.
+- **DRM video (EME).** A protected media pipeline never exposes its pixels: `drawImage` yields nothing usable and the canvas is unreadable. Such a video falls back to its poster and then to the keyword pass, and after `MAX_VIDEO_MISSES` unreadable looks the sampler stops re-checking it. There is no fix available in an extension.
+- **Cross-origin video without CORS.** Same shape as an image: the canvas is tainted, `toDataURL` throws, and only the poster is left.
+- **Audio.** Nothing is inspected, and a video is only silenced once it has been *blocked* — a `pending` video that autoplays can be heard before its first verdict.
 - **CSS backgrounds by content.** The background pass is keyword-only — it never scores pixels — and it skips elements that appear after the debounced scan unless another scan is triggered. `image-set()` and pseudo-element backgrounds are not read at all.
 - **Pages the extension cannot run on.** `chrome://`, the Web Store, other extensions, `view-source:`, the PDF viewer.
 
