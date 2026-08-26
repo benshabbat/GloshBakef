@@ -33,6 +33,10 @@ async function toBitmap(url, dataUrl) {
       cache: "force-cache"
     });
     if (!response.ok) return null;
+    // Refuse on the declared length before the body is pulled into memory: the URL comes
+    // from page markup, so "an image" can turn out to be a multi-gigabyte download. The
+    // blob check below still covers responses that declare no length at all.
+    if (Number(response.headers.get("content-length")) > MAX_BYTES) return null;
     const blob = await response.blob();
     if (blob.size === 0 || blob.size > MAX_BYTES) return null;
     if (blob.type && !blob.type.startsWith("image/")) return null;
