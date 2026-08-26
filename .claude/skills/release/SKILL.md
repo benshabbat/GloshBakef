@@ -33,7 +33,9 @@ Include, from the repo root:
 
 Everything under `src/` except the two bundled entry points is **runtime code**, not sources — the worker, the shared module, and the UI pages are loaded raw. They must ship.
 
-Exclude: `node_modules/`, `.git/`, `.claude/`, `scripts/`, `package.json`, `package-lock.json`, `README.md`, and the two bundled entry points' sources if you want a minimal package (harmless either way; shipping readable source is a reasonable choice for a privacy-claiming extension).
+Exclude: `node_modules/`, `.git/`, `.claude/`, `scripts/`, `test/`, `package.json`, `package-lock.json`, `README.md`, and the two bundled entry points' sources if you want a minimal package (harmless either way; shipping readable source is a reasonable choice for a privacy-claiming extension).
+
+`test/verify.html` is a developer harness, not a product surface. It never loads in the extension — it is opened as a `file://` page — so shipping it would only add a page a store reviewer has to ask about.
 
 The ZIP must contain the manifest at its **root**, not inside a wrapper folder.
 

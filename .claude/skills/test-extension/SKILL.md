@@ -17,6 +17,27 @@ Everything else — the state machine, observers, messaging, the offscreen docum
 
 Build first (`npm run check && npm run build`), then `chrome://extensions` → Developer mode → **Load unpacked**.
 
+## Start with the self-test
+
+Options page → **בדיקה עצמית** → «הרץ בדיקה». It sends `MSG.SELFTEST` to the worker, which
+walks the real chain — settings, the two switches that make the chain a no-op (`enabled`,
+`analyzeContent`), offscreen creation, model load, decode, classify, `riskScore`, and the
+stats counter — against a `data:` PNG inlined in `src/background/index.js`. It stops at the
+first step that fails and reports why.
+
+This exists because **fail-open makes a broken pipeline and a clean page identical**: every
+error path ends in `allow()`, so "nothing is hidden" is the symptom of both a working filter
+and a completely severed one. Before investigating any "it doesn't filter on X" report, run
+it — a red step there means the extension is broken *everywhere* and the site is a red
+herring. Only once it is all green is a per-site question worth asking.
+
+`test/verify.html` is the complement: a `file://` page of cases whose correct verdict is
+known in advance (keyword hits, the word-boundary regressions, the size gate, the `blob:`
+pixel path) that grades itself pass/fail in the page. It needs **Allow access to file URLs**
+enabled for the extension, and it says so in orange when it is not.
+
+Neither replaces the walkthrough below — they cover the chain, not the state machine.
+
 ## Three consoles, three contexts
 
 A bug is usually in one of them, and each has its own DevTools:
