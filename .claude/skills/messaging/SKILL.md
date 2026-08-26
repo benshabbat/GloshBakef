@@ -10,14 +10,23 @@ All names live in [src/shared/messages.js](../../../src/shared/messages.js). Nev
 | Message | From → to | Response |
 | --- | --- | --- |
 | `SCORE` | content script → worker | `{ score }` or `{ score, needsPixels: true }`, async |
-| `SCORE_OFFSCREEN` | worker → offscreen | `{ classes }` or `{ classes: null }`, async |
+| `SCORE_OFFSCREEN` | worker → offscreen | `{ classes }` or `{ classes: null, error }`, async |
 | `REPORT` | content script → worker | none (fire and forget) |
 | `TAB_STATE` | popup → worker | `{ blocked }`, sync |
+| `SELFTEST` | options page → worker | `{ steps: [{ name, ok, detail }] }`, async |
 | `REVEAL_ALL` | popup → content script (all frames) | none |
 
 `SCORE` carries `{ url }` plus three optional flags: `dataUrl` (pixels already snapshotted, skips the fetch), `cache: false` (a video frame — do not key this verdict by URL) and `pixelsOnly: true` (a `blob:` URL — answer from cache or ask for pixels, but never fetch).
 
-**A page's frame is a sender too.** `sender.tab` is set for anything a content script sends and absent for the popup, the options page and the offscreen document — so a handler that acts on a tab the *message* names, rather than the one the sender is in, must check it. `TAB_STATE` does; without that check any page on the web could read another tab's blocked count.
+`SCORE_OFFSCREEN`'s `error` is a human-readable reason and exists only for `SELFTEST`. The scoring path reads nothing but `classes`, because every failure there fails open regardless of cause — but a diagnostic that cannot say *why* the chain stopped is worthless, and that is what `error` is for.
+
+## Which sender is it? Not `sender.tab`
+
+**`sender.tab` cannot tell an extension page from a content script.** It is set for anything sent from a tab — and this extension's options page is a tab (`manifest.json` uses the legacy `options_page` key, which always opens in one). Only the popup and the offscreen document have no tab, which is what makes the mistake invisible: a guard written as `if (sender.tab) return false` looks correct while `TAB_STATE` is the only page-to-worker message, and silently rejects the first options-page message anyone adds. The symptom is nasty — the listener returns without calling `sendResponse`, so the caller's `sendMessage` *resolves with `undefined`* rather than throwing, and reads as a stale or missing worker.
+
+Use [`isFromExtensionPage(sender, chrome.runtime.getURL(""))`](../../../src/shared/messages.js) instead. A content script reports the URL of the page it was injected into in `sender.url`, never a `chrome-extension://` one, whatever that page claims to be. It is covered by assertions in `scripts/test.mjs` under "message senders", including the options-page-with-a-tab case that regressed.
+
+`sender.tab` remains right for a *different* question: a handler that acts on a tab the **message** names rather than the one the sender is in must reject senders that have a tab at all. `TAB_STATE` does exactly that, and without it any page on the web could read another tab's blocked count.
 
 ## The routing rule that is easy to get wrong
 

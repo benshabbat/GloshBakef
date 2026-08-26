@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אימות מסנן התמונות</title>
+<style>
+  :root {
+    --ink: #1d2321; --dim: #5d6b65; --line: #d5cec1; --paper: #f7f4ee;
+    --card: #fff; --ok: #2f6b4f; --bad: #a8322b; --wait: #8a6d1f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--paper); color: var(--ink);
+    font: 15px/1.6 "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  p { margin: 0 0 12px; color: var(--dim); }
+  code { background: #ece7dc; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+  #verdict {
+    padding: 16px 18px; border-radius: 10px; margin: 16px 0 8px;
+    border: 2px solid var(--line); background: var(--card); font-size: 17px; font-weight: 600;
+  }
+  #verdict.ok   { border-color: var(--ok);   color: var(--ok); }
+  #verdict.bad  { border-color: var(--bad);  color: var(--bad); }
+  #verdict.wait { border-color: var(--wait); color: var(--wait); }
+  #verdict small { display: block; font-weight: 400; font-size: 14px; margin-top: 6px; color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); }
+  th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #efeae0; font-size: 13px; color: var(--dim); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  td.res { white-space: nowrap; font-weight: 600; width: 1%; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .wait { color: var(--wait); }
+  .state { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--dim); }
+
+  #grid { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+  #grid figure { margin: 0; width: 128px; }
+  #grid img { width: 128px; height: 128px; display: block; border-radius: 6px; }
+  #grid figcaption { font-size: 11px; color: var(--dim); margin-top: 4px; line-height: 1.35; }
+
+  .probe { display: flex; gap: 8px; margin-bottom: 10px; }
+  .probe input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; direction: ltr; text-align: left; }
+  button { padding: 8px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); font: inherit; cursor: pointer; }
+  button:hover { background: #efeae0; }
+  #probeOut { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 13px; min-height: 20px; }
+  #probeOut div { margin-bottom: 4px; }
+  #probeImg { max-width: 200px; max-height: 200px; margin-top: 10px; border-radius: 6px; }
+  #snippet {
+    background: #22282a; color: #e6ece9; padding: 14px; border-radius: 8px; overflow-x: auto;
+    direction: ltr; text-align: left; font: 12px/1.55 ui-monospace, Consolas, monospace; margin-top: 8px;
+  }
+  #copySnippet.done { border-color: var(--ok); color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>אימות מסנן התמונות</h1>
+<p>
+  הדף הזה בודק כל שלב בצינור הסינון בנפרד, עם תמונות שהתשובה הנכונה לגביהן ידועה מראש.
+  כל התמונות כאן נוצרות בדף עצמו (מלבנים צבעוניים) — אין כאן שום תוכן אמיתי ואין שום בקשת רשת.
+</p>
+
+<div id="verdict" class="wait">בודק…</div>
+
+<h2>תוצאות</h2>
+<table>
+  <thead><tr><th>בדיקה</th><th>מה אמור לקרות</th><th>מצב בפועל</th><th>תוצאה</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<h2>התמונות שנבדקות</h2>
+<p>כאן אפשר לראות בעין מה מטושטש ומה לא. לחיצה על תמונה מטושטשת אמורה לחשוף אותה ולא לנווט לשום מקום.</p>
+<div id="grid"></div>
+
+<h2>בדיקת כתובת אמיתית</h2>
+<p>
+  העתק כתובת של תמונה מאתר אמיתי (באינסטגרם: לחיצה ימנית על תמונה בפיד ← «העתק כתובת תמונה»)
+  והדבק כאן. הדף ידווח באיזה מסלול התוסף הלך ואם הקנבס נגוע — כלומר אם מסלול הפיקסלים חסום באתר הזה.
+</p>
+<div class="probe">
+  <input id="probeUrl" type="url" placeholder="https://scontent-... .cdninstagram.com/v/...">
+  <button id="probeGo">בדוק</button>
+</div>
+<div id="probeOut">—</div>
+<img id="probeImg" hidden alt="">
+
+<h2>בדיקה בתוך האתר עצמו</h2>
+<p>
+  אתרים גדולים חותמים את כתובות התמונות שלהם וקושרים אותן להקשר, ולכן כתובת שמודבקת בדף חיצוני
+  עלולה פשוט לא להיטען — וזה לא אומר כלום על התוסף. הבדיקה האמינה רצה על התמונה החיה במקום שבו היא נמצאת.
+</p>
+<p>
+  פתח את האתר, גלול עד שנטענו תמונות, פתח DevTools על הדף עצמו (F12 ← Console) והדבק:
+</p>
+<button id="copySnippet">העתק את הקוד</button>
+<pre id="snippet">(async () =&gt; {
+  const big = [...document.images].filter(i =&gt; i.naturalWidth &gt;= 200);
+  if (!big.length) { console.log("לא נמצאו תמונות גדולות — גלול ונסה שוב"); return; }
+  const img = big[0];
+  const out = {
+    "תמונות גדולות בדף": big.length,
+    "crossorigin": img.crossOrigin ?? "(לא מוגדר)",
+    "פסק דין": img.getAttribute("data-imgfilter") ?? "(לא תויג כלל)",
+    "גודל טבעי": img.naturalWidth + "x" + img.naturalHeight
+  };
+  try {
+    const c = Object.assign(document.createElement("canvas"), { width: 224, height: 224 });
+    c.getContext("2d").drawImage(img, 0, 0, 224, 224);
+    c.toDataURL("image/jpeg", 0.75);
+    out["קנבס"] = "נקי — מסלול הפיקסלים עובד";
+  } catch (e) {
+    out["קנבס"] = "נגוע (" + e.name + ") — מסלול הפיקסלים חסום";
+  }
+  out["מצבים בדף"] = [...document.querySelectorAll("[data-imgfilter]")]
+    .reduce((a, el) =&gt; { const s = el.getAttribute("data-imgfilter"); a[s] = (a[s] ?? 0) + 1; return a; }, {});
+  console.log(out);
+  console.log("הכתובת לבדיקת ה-service worker:", img.currentSrc);
+})();</pre>
+
+</main>
+
+<script>
+/* ------------------------------------------------------------------ test images */
+
+/** A plain gradient rectangle, as a data: URI. No network, no real content. */
+function makeImage(size, hue, text) {
+  const canvas = Object.assign(document.createElement("canvas"), { width: size, height: size });
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, size, size);
+  gradient.addColorStop(0, `hsl(${hue} 55% 68%)`);
+  gradient.addColorStop(1, `hsl(${hue + 40} 45% 42%)`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = "rgba(255,255,255,.92)";
+  ctx.font = `600 ${Math.round(size / 9)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText(text, size / 2, size / 2 + size / 26);
+  return canvas;
+}
+
+/**
+ * Every case states the verdict it must reach, so a wrong answer is a failure rather
+ * than something to interpret. `blocked` cases all hit the keyword pass, which runs
+ * before the model and before the size gate — so they are deterministic and need no
+ * network, no worker and no model.
+ */
+const CASES = [
+  {
+    id: "kw-alt", expect: "blocked", group: "keyword",
+    label: "מילת חסימה ב־alt", want: "מוסתר מיד",
+    build: (img) => { img.alt = "A bikini photo"; }
+  },
+  {
+    id: "kw-title", expect: "blocked", group: "keyword",
+    label: "מילת חסימה ב־title", want: "מוסתר מיד",
+    build: (img) => { img.title = "NSFW sample"; }
+  },
+  {
+    id: "kw-aria", expect: "blocked", group: "keyword",
+    label: "מילת חסימה ב־aria-label", want: "מוסתר מיד",
+    build: (img) => { img.setAttribute("aria-label", "explicit material"); }
+  },
+  {
+    id: "kw-href", expect: "blocked", group: "keyword",
+    label: "מילת חסימה בקישור העוטף", want: "מוסתר מיד",
+    // Also proves normalizeText(): the underscores must become word separators.
+    href: "https://example.com/albums/nude_beach_01.jpg"
+  },
+  {
+    id: "kw-boundary", expect: "safe", group: "keyword",
+    label: "גבולות מילה: essexyachts · middlesex · adulterated", want: "לא מוסתר",
+    build: (img) => { img.alt = "essexyachts middlesex adulterated"; }
+  },
+  {
+    id: "size-gate", expect: "safe", group: "gate",
+    label: "תמונה 40px — שער הגודל", want: "לא מוסתר, בלי פנייה למודל",
+    size: 40
+  },
+  {
+    id: "model-data", expect: "safe", group: "pipeline",
+    label: "תמונה תמימה (data:) — מסלול המודל", want: "לא מוסתר, ומגיע להכרעה"
+  },
+  {
+    id: "model-blob", expect: "safe", group: "pipeline",
+    label: "תמונה תמימה (blob:) — מסלול הפיקסלים", want: "לא מוסתר, ומגיע להכרעה",
+    blob: true
+  }
+];
+
+const grid = document.getElementById("grid");
+const nodes = new Map();
+
+CASES.forEach((testCase, index) => {
+  const size = testCase.size ?? 256;
+  const canvas = makeImage(size, index * 41, String(index + 1));
+  const img = document.createElement("img");
+  img.width = img.height = testCase.size ? 40 : 128;
+  img.decoding = "sync";
+  testCase.build?.(img);
+
+  if (testCase.blob) canvas.toBlob((b) => { img.src = URL.createObjectURL(b); }, "image/png");
+  else img.src = canvas.toDataURL("image/png");
+
+  const figure = document.createElement("figure");
+  const holder = testCase.href
+    ? Object.assign(document.createElement("a"), { href: testCase.href })
+    : figure;
+  holder.appendChild(img);
+  if (holder !== figure) figure.appendChild(holder);
+  figure.appendChild(Object.assign(document.createElement("figcaption"), {
+    textContent: `${index + 1}. ${testCase.label}`
+  }));
+  grid.appendChild(figure);
+  nodes.set(testCase.id, img);
+});
+
+/* ---------------------------------------------------------------------- grading */
+
+const rows = document.getElementById("rows");
+const verdict = document.getElementById("verdict");
+const STATE_TEXT = { blocked: "מוסתר", safe: "אושר", pending: "ממתין…", revealed: "נחשף ידנית" };
+
+function stateOf(id) {
+  return nodes.get(id).getAttribute("data-imgfilter");
+}
+
+function render(settled) {
+  const off = document.documentElement.hasAttribute("data-imgfilter-off");
+  const tagged = CASES.filter((c) => stateOf(c.id) !== null).length;
+
+  rows.innerHTML = "";
+  addRow(
+    "התוסף פעיל בדף הזה",
+    "הסינון דולק ולא ברשימת ההיתר",
+    off ? "כבוי (data-imgfilter-off)" : "פעיל",
+    off ? "bad" : "ok"
+  );
+  addRow(
+    "הסקריפט רואה את התמונות",
+    `כל ${CASES.length} התמונות מתויגות`,
+    `${tagged} מתוך ${CASES.length} מתויגות`,
+    tagged === CASES.length ? "ok" : settled ? "bad" : "wait"
+  );
+
+  const results = CASES.map((testCase) => {
+    const state = stateOf(testCase.id);
+    // `revealed` means the tester clicked it; that is a pass for a case meant to be hidden.
+    const hit = state === testCase.expect || (testCase.expect === "blocked" && state === "revealed");
+    const status = hit ? "ok" : state === null || state === "pending" ? (settled ? "bad" : "wait") : "bad";
+    addRow(
+      testCase.label,
+      testCase.want,
+      state === null ? "לא נבדק" : STATE_TEXT[state] ?? state,
+      status
+    );
+    return status;
+  });
+
+  const failed = results.filter((r) => r === "bad").length;
+  const waiting = results.filter((r) => r === "wait").length;
+
+  if (off) {
+    set("bad", "הסינון כבוי בדף הזה.", "הפעל את התוסף מהפופאפ, או הסר את הדף מרשימת ההיתר.");
+  } else if (tagged === 0 && settled) {
+    set("bad", "התוסף לא רץ בדף הזה בכלל.",
+      "אם פתחת את הקובץ ישירות מהדיסק: chrome://extensions ← «מסנן תמונות» ← «פרטים» ← סמן «אפשר גישה לכתובות קבצים», ורענן.");
+  } else if (waiting) {
+    set("wait", "בודק…", "התמונות עדיין מקבלות פסק דין.");
+  } else if (failed) {
+    set("bad", `${failed} בדיקות נכשלו.`, "כל שורה אדומה בטבלה היא שלב שבור בצינור. השורות של מילות החסימה לא תלויות במודל כלל.");
+  } else {
+    set("ok", "כל הבדיקות עברו.",
+      "הצינור שלם: התוסף רץ, רואה תמונות, מכריע ומטשטש. אם באתר מסוים שום דבר לא מטושטש — הבעיה שם היא בציון של המודל או במסלול הפיקסלים, לא בתוסף עצמו. בדוק את זה בקטע «בדיקת כתובת אמיתית» למטה.");
+  }
+}
+
+function addRow(label, want, actual, status) {
+  const mark = { ok: "✓ עבר", bad: "✕ נכשל", wait: "… ממתין" }[status];
+  const tr = document.createElement("tr");
+  for (const [text, cls] of [[label, ""], [want, "state"], [actual, "state"], [mark, `res ${status}`]]) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    if (cls) td.className = cls;
+    tr.appendChild(td);
+  }
+  rows.appendChild(tr);
+}
+
+function set(kind, title, detail) {
+  verdict.className = kind;
+  verdict.textContent = title;
+  verdict.appendChild(Object.assign(document.createElement("small"), { textContent: detail }));
+}
+
+// Settle detection: once the verdicts stop moving for ~3s, whatever is still `pending`
+// is stuck rather than slow — which is the distinction that matters.
+let lastSignature = "";
+let stableTicks = 0;
+setInterval(() => {
+  const signature = CASES.map((c) => stateOf(c.id)).join("|");
+  if (signature === lastSignature) stableTicks += 1;
+  else { lastSignature = signature; stableTicks = 0; }
+  render(stableTicks >= 6);
+}, 500);
+
+/* ------------------------------------------------------------- real-URL probe */
+
+const probeOut = document.getElementById("probeOut");
+const probeImg = document.getElementById("probeImg");
+
+document.getElementById("copySnippet").addEventListener("click", async (event) => {
+  await navigator.clipboard.writeText(document.getElementById("snippet").textContent);
+  event.target.textContent = "הועתק ✓";
+  event.target.classList.add("done");
+});
+
+document.getElementById("probeGo").addEventListener("click", () => {
+  const url = document.getElementById("probeUrl").value.trim();
+  if (!url) return;
+  probeOut.textContent = "טוען…";
+  probeImg.hidden = false;
+  probeImg.removeAttribute("data-imgfilter");
+  probeImg.onload = () => setTimeout(reportProbe, 2500);
+  probeImg.onerror = () => explainProbeFailure(url);
+  probeImg.src = url;
+});
+
+/**
+ * A dead probe URL says nothing about the extension, so it must not read like a verdict.
+ * The three causes look identical from here and are told apart by their shape, not by
+ * anything the load told us — an `<img>` error event carries no status code.
+ */
+function explainProbeFailure(url) {
+  probeImg.hidden = true;
+  const causes = url.startsWith("blob:")
+    ? ["זו כתובת <code>blob:</code>. היא קיימת רק בתוך הדף שיצר אותה ולעולם לא תיטען כאן — זו לא תקלה בתוסף."]
+    : [
+        "הכתובת החתומה פגה. כתובות של אינסטגרם חיות דקות ספורות.",
+        "השרת מסרב לבקשה שלא מגיעה מההקשר של האתר עצמו (403).",
+        "התמונה מאחורי התחברות."
+      ];
+  probeOut.innerHTML =
+    "<div class=\"bad\"><strong>התמונה לא נטענה — הבדיקה הזו לא הכריעה כלום.</strong></div>" +
+    "<div style=\"margin:6px 0\">סיבות אפשריות:</div><ul style=\"margin:0 0 8px 18px;padding:0\">" +
+    causes.map((c) => `<li>${c}</li>`).join("") +
+    "</ul><div>השתמש בקטע «בדיקה בתוך האתר עצמו» למטה — הוא בודק את התמונה החיה ולא מושפע מכל זה.</div>";
+}
+
+function reportProbe() {
+  const state = probeImg.getAttribute("data-imgfilter");
+
+  // The taint test is the whole question for a site where nothing is ever hidden: if the
+  // extension cannot fetch the URL AND cannot read the pixels, every image there scores
+  // UNKNOWN and fails open — visibly identical to "the model checked and approved".
+  let taint;
+  try {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 224, height: 224 });
+    canvas.getContext("2d").drawImage(probeImg, 0, 0, 224, 224);
+    canvas.toDataURL("image/jpeg", 0.75);
+    taint = { ok: true, text: "נקי — מסלול הפיקסלים זמין" };
+  } catch (error) {
+    taint = { ok: false, text: `נגוע (${error.name}) — מסלול הפיקסלים חסום באתר הזה` };
+  }
+
+  probeOut.innerHTML = "";
+  const lines = [
+    ["פסק דין", state === null ? "לא תויג כלל — הסקריפט לא ראה אותה" : STATE_TEXT[state] ?? state, state !== null],
+    ["crossorigin", probeImg.crossOrigin ?? "לא מוגדר", true],
+    ["קנבס", taint.text, taint.ok],
+    ["גודל טבעי", `${probeImg.naturalWidth}×${probeImg.naturalHeight}`, probeImg.naturalWidth >= 96]
+  ];
+  for (const [label, value, good] of lines) {
+    const div = document.createElement("div");
+    div.innerHTML = `<strong>${label}:</strong> <span class="${good ? "ok" : "bad"}">${value}</span>`;
+    probeOut.appendChild(div);
+  }
+
+  const note = document.createElement("div");
+  note.style.marginTop = "8px";
+  note.style.color = "var(--dim)";
+  note.textContent = state === "safe" && taint.ok
+    ? "המודל הצליח לקרוא את התמונה והחליט שהיא תקינה. אם היית מצפה שתוסתר — זו שאלה של סף, לא של תאימות. הורד את הרגישות בהגדרות."
+    : state === "safe" && !taint.ok
+      ? "התמונה אושרה אבל הקנבס נגוע. אם גם ה־fetch נכשל, ה'אישור' הזה הוא fail-open ולא בדיקה אמיתית — כלומר התוסף עיוור באתר הזה."
+      : state === "pending"
+        ? "נתקעה בהמתנה: הפסק דין לא חזר. בדוק את קונסולת ה־service worker."
+        : "";
+  if (note.textContent) probeOut.appendChild(note);
+}
+</script>
+</body>
+</html>

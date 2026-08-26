@@ -20,6 +20,7 @@ import {
 } from "../src/shared/settings.js";
 import { compileKeywords, matchesKeyword, normalizeText } from "../src/shared/keywords.js";
 import { isFetchableUrl } from "../src/shared/urls.js";
+import { isFromExtensionPage } from "../src/shared/messages.js";
 
 let passed = 0;
 const failures = [];
@@ -175,6 +176,29 @@ check("zero falls back to the default", migrate({ videoSampleSeconds: 0 }).video
 check("a negative interval is clamped", migrate({ videoSampleSeconds: -5 }).videoSampleSeconds, 1);
 check("garbage falls back to the default", migrate({ videoSampleSeconds: "soon" }).videoSampleSeconds, SETTINGS.videoSampleSeconds);
 check("an upgrading user keeps video checks on", migrate({ sensitivity: "strict" }).analyzeVideos, true);
+
+/* ------------------------------------------------------------- message senders */
+
+group("message senders");
+const ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/";
+const from = (sender) => isFromExtensionPage(sender, ORIGIN);
+
+// The options page IS a tab. `sender.tab` was used as the guard here once and rejected it,
+// which made the self-test report "no answer" while the worker was perfectly healthy.
+check("the options page is accepted", from({ url: `${ORIGIN}src/ui/options.html`, tab: { id: 7 } }), true);
+check("the popup is accepted", from({ url: `${ORIGIN}src/ui/popup.html` }), true);
+check("the offscreen document is accepted", from({ url: `${ORIGIN}src/offscreen/offscreen.html` }), true);
+
+// A content script carries the host page's URL, whatever the page pretends to be.
+check("a content script is refused", from({ url: "https://example.com/a", tab: { id: 3 } }), false);
+check("a lookalike host is refused", from({ url: "https://chrome-extension.example.com/x" }), false);
+// A page cannot spell its way in: the origin has a trailing slash, so a prefix that only
+// shares the extension id but continues into another host cannot match.
+check("an origin-prefix lookalike is refused", from({ url: `${ORIGIN.slice(0, -1)}.evil.com/x` }), false);
+check("a sender with no url is refused", from({ tab: { id: 3 } }), false);
+check("an empty sender is refused", from({}), false);
+check("a missing sender is refused", from(undefined), false);
+check("an unknown extension origin is refused", isFromExtensionPage({ url: `${ORIGIN}x` }, ""), false);
 
 /* ---------------------------------------------------------------------- report */
 

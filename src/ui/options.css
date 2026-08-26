@@ -43,6 +43,24 @@ code {
 
 input[type="number"] { width: 90px; text-align: center; }
 
+.selftest { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.selftest:empty { margin: 0; }
+
+.selftest li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d5cec1);
+  border-radius: 6px;
+}
+.selftest li[data-ok="true"] { border-inline-start: 3px solid var(--accent); }
+.selftest li[data-ok="false"] { border-inline-start: 3px solid #a8322b; }
+.selftest .mark { font-weight: 700; }
+.selftest li[data-ok="true"] .mark { color: var(--accent); }
+.selftest li[data-ok="false"] .mark { color: #a8322b; }
+.selftest .detail { grid-column: 2; color: var(--muted); font-size: 12px; word-break: break-word; }
+
 @media (prefers-reduced-motion: reduce) {
   #status { transition: none; }
 }

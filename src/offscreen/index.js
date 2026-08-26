@@ -52,15 +52,23 @@ async function toBitmap(url, dataUrl) {
   }
 }
 
+/**
+ * Returns `{ classes }` on success and `{ classes: null, error }` otherwise. The reason
+ * matters: every caller fails open on a null, so without it a model that never loads is
+ * indistinguishable from a page full of harmless pictures. Only the self-test surfaces
+ * `error` — the scoring path still cares about nothing but `classes`.
+ */
 async function classify(url, dataUrl) {
   const bitmap = await toBitmap(url, dataUrl);
-  if (!bitmap) return null;
+  if (!bitmap) {
+    return { classes: null, error: "התמונה לא נקראה — ההורדה או הפענוח נכשלו" };
+  }
   try {
     const model = await getModel();
     const predictions = await model.classify(bitmap);
-    return Object.fromEntries(predictions.map((p) => [p.className, p.probability]));
-  } catch {
-    return null;
+    return { classes: Object.fromEntries(predictions.map((p) => [p.className, p.probability])) };
+  } catch (error) {
+    return { classes: null, error: `המודל נכשל: ${error?.message ?? error}` };
   } finally {
     bitmap.close();
   }
@@ -68,9 +76,8 @@ async function classify(url, dataUrl) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.target !== "offscreen" || message.type !== MSG.SCORE_OFFSCREEN) return false;
-  classify(message.url, message.dataUrl).then(
-    (classes) => sendResponse({ classes }),
-    () => sendResponse({ classes: null })
+  classify(message.url, message.dataUrl).then(sendResponse, (error) =>
+    sendResponse({ classes: null, error: `שגיאה לא צפויה: ${error?.message ?? error}` })
   );
   return true;
 });

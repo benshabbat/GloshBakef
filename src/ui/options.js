@@ -9,6 +9,7 @@ import {
   parseKeywords,
   parseHostnames
 } from "../shared/settings.js";
+import { MSG } from "../shared/messages.js";
 
 const TOGGLES = [
   "enabled",
@@ -119,6 +120,73 @@ el("allowlist").addEventListener("blur", async () => {
 el("reset-keywords").addEventListener("click", () => {
   el("keywords").value = DEFAULT_KEYWORDS.join(", ");
   save({ keywords: DEFAULT_KEYWORDS });
+});
+
+/**
+ * Every failure in the analysis chain fails open, so a broken pipeline looks exactly like
+ * a page with nothing to hide. This is the one place that tells them apart.
+ */
+el("selftest").addEventListener("click", async () => {
+  const button = el("selftest");
+  const out = el("selftest-out");
+  button.disabled = true;
+  button.textContent = "בודק…";
+  out.replaceChildren();
+
+  let steps;
+  try {
+    steps = (await chrome.runtime.sendMessage({ type: MSG.SELFTEST }))?.steps;
+    // Resolving with nothing is different from failing to reach anyone: a listener did
+    // answer, it just did not recognise this message. That is a worker still running an
+    // older build — the pages are re-read from disk on every open, the worker is not.
+    if (!steps?.length) {
+      steps = [{
+        name: "שירות הרקע רץ מגרסה ישנה",
+        ok: false,
+        detail: "הוא ענה אך אינו מכיר את הבדיקה. רענן את התוסף ב־chrome://extensions (האייקון המעגלי) והרץ שוב."
+      }];
+    }
+  } catch (error) {
+    steps = [{
+      name: "אין קשר לשירות הרקע",
+      ok: false,
+      detail: `${error?.message ?? error} — שירות הרקע אינו רץ כלל. בדוק אם יש כפתור «שגיאות» בכרטיס התוסף ב־chrome://extensions.`
+    }];
+  }
+
+  for (const step of steps) {
+    const item = document.createElement("li");
+    item.dataset.ok = String(step.ok);
+    item.append(
+      Object.assign(document.createElement("span"), { className: "mark", textContent: step.ok ? "✓" : "✕" }),
+      Object.assign(document.createElement("span"), { textContent: step.name })
+    );
+    if (step.detail) {
+      item.append(Object.assign(document.createElement("span"), { className: "detail", textContent: step.detail }));
+    }
+    out.append(item);
+  }
+
+  const failed = steps.find((step) => !step.ok);
+  const summary = document.createElement("li");
+  summary.dataset.ok = String(!failed);
+  summary.append(
+    Object.assign(document.createElement("span"), { className: "mark", textContent: failed ? "✕" : "✓" }),
+    Object.assign(document.createElement("span"), {
+      textContent: failed ? `הצינור נעצר ב: ${failed.name}` : "הצינור שלם — הניתוח עובד"
+    })
+  );
+  if (!failed) {
+    summary.append(Object.assign(document.createElement("span"), {
+      className: "detail",
+      textContent: "אתר שבו שום דבר לא מוסתר הוא שאלה של סף או של גישה לפיקסלים, לא של התקנה שבורה."
+    }));
+  }
+  out.append(summary);
+
+  button.disabled = false;
+  button.textContent = "הרץ בדיקה שוב";
+  await refreshStats();
 });
 
 el("reset-stats").addEventListener("click", async () => {

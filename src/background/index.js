@@ -5,7 +5,7 @@ import {
   riskScore,
   STATS
 } from "../shared/settings.js";
-import { MSG, UNKNOWN_SCORE } from "../shared/messages.js";
+import { MSG, UNKNOWN_SCORE, isFromExtensionPage } from "../shared/messages.js";
 import { isFetchableUrl } from "../shared/urls.js";
 
 const OFFSCREEN_URL = "src/offscreen/offscreen.html";
@@ -102,6 +102,7 @@ function pump() {
   }
 }
 
+/** Resolves to the offscreen document's `{ classes, error }` reply. */
 async function runModel(url, dataUrl, attempt = 0) {
   await ensureOffscreen();
   try {
@@ -111,7 +112,7 @@ async function runModel(url, dataUrl, attempt = 0) {
       url,
       dataUrl
     });
-    return response?.classes ?? null;
+    return response ?? { classes: null, error: "מסמך הניתוח לא ענה" };
   } catch (error) {
     // The document can be torn down between ensureOffscreen() and the send.
     if (attempt === 0) return runModel(url, dataUrl, 1);
@@ -147,7 +148,7 @@ async function scoreImage({ url, dataUrl, cache = true, pixelsOnly = false }) {
     return { score: UNKNOWN_SCORE, needsPixels: true };
   }
 
-  const classes = await enqueue(() => runModel(url, dataUrl));
+  const classes = (await enqueue(() => runModel(url, dataUrl)))?.classes ?? null;
 
   if (!classes) {
     if (dataUrl) return { score: UNKNOWN_SCORE };
@@ -227,6 +228,101 @@ function recordCount(tabId, frameId, count) {
   updateBadge(tabId);
 }
 
+/* ---------------------------------------------------------------------- self-test */
+
+/**
+ * A 16×16 solid-colour PNG, inline. A `data:` URL carries its own bytes, so this walks
+ * the real analysis chain — worker, offscreen document, model, scoring — without a
+ * network request, a page, or anything a site could interfere with. If it fails, the
+ * extension is broken everywhere; if it passes, a site that hides nothing is a scoring
+ * or a pixel-access question rather than a broken install.
+ */
+const TEST_IMAGE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR42mOo" +
+  "aKolCTGMahjVMHw1AABXsncQ/UM6vAAAAABJRU5ErkJggg==";
+
+async function selfTest() {
+  const steps = [];
+  const record = (name, ok, detail) => {
+    steps.push({ name, ok, detail });
+    return ok;
+  };
+  const reason = (error) => String(error?.message ?? error);
+
+  let settings;
+  try {
+    settings = await getSettings();
+    record("קריאת ההגדרות", true, `סף חסימה ${settings.threshold}`);
+  } catch (error) {
+    record("קריאת ההגדרות", false, reason(error));
+    return { steps };
+  }
+
+  // The two switches that turn the analysis chain into a no-op are checked before the
+  // chain itself. Without them the test happily reports a healthy pipeline for an
+  // extension that is switched off — which is the single most likely reason a user is
+  // running it in the first place, and the one answer it must never rule out.
+  if (!record("«המסנן פעיל» מופעל", settings.enabled, settings.enabled
+    ? undefined
+    : "המסנן כבוי גלובלית. כל פריים מפרק את עצמו ושום דבר לא מסונן, גם אם כל שאר השרשרת תקינה")) {
+    return { steps };
+  }
+
+  if (!record("«ניתוח תוכן התמונה» מופעל", settings.analyzeContent, settings.analyzeContent
+    ? undefined
+    : "כל עוד ההגדרה הזו כבויה, המודל לעולם לא ירוץ ותמונות ייחסמו רק לפי מילות חסימה")) {
+    return { steps };
+  }
+
+  if (settings.allowlist.length) {
+    // Not a failure: it is per-site and deliberate. But "nothing is hidden on X" has an
+    // obvious answer if X is on this list, and the test is the place to surface it.
+    record("אתרים ללא סינון", true, `${settings.allowlist.length} ברשימה: ${settings.allowlist.join(", ")}`);
+  }
+
+  try {
+    await ensureOffscreen();
+    const exists = await chrome.offscreen.hasDocument();
+    if (!record("יצירת מסמך הניתוח", exists, exists ? undefined : "המסמך לא קיים גם אחרי היצירה")) {
+      return { steps };
+    }
+  } catch (error) {
+    record("יצירת מסמך הניתוח", false, reason(error));
+    return { steps };
+  }
+
+  // Deliberately not through `enqueue`: the queue swallows the reason, and the reason is
+  // the entire point of this function.
+  let response;
+  try {
+    response = await runModel(TEST_IMAGE, undefined);
+  } catch (error) {
+    record("הרצת המודל", false, reason(error));
+    return { steps };
+  }
+
+  const classes = response?.classes;
+  if (!record("הרצת המודל", Boolean(classes), classes
+    ? Object.entries(classes).map(([name, p]) => `${name} ${p.toFixed(2)}`).join(" · ")
+    : response?.error ?? "המודל החזיר תשובה ריקה")) {
+    return { steps };
+  }
+
+  const score = riskScore(classes, settings);
+  record("חישוב הציון", true, `${score.toFixed(3)} — ${score >= settings.threshold ? "מעל" : "מתחת ל"}סף`);
+
+  // Writing the counter is part of the chain: it is what the statistics line reports, so
+  // a self-test that passed while the counter stayed at zero would still be a mystery.
+  const before = (await chrome.storage.local.get(STATS)).analyzedTotal;
+  recordStats(score, settings);
+  flushStats();
+  await statsChain;
+  const after = (await chrome.storage.local.get(STATS)).analyzedTotal;
+  record("עדכון מונה ההרצות", after > before, `${before} ← ${after}`);
+
+  return { steps };
+}
+
 /* ------------------------------------------------- dynamic pre-blur registration */
 
 async function syncPreblur(settings) {
@@ -273,6 +369,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === MSG.REPORT) {
     recordCount(sender.tab?.id, sender.frameId, message.count);
     return false;
+  }
+
+  if (message?.type === MSG.SELFTEST) {
+    // Extension pages only: a content script — which is to say any page on the web — must
+    // not be able to make the worker spin up the model on demand. `sender.tab` is the
+    // wrong test here even though TAB_STATE above can use it; see `isFromExtensionPage`.
+    if (!isFromExtensionPage(sender, chrome.runtime.getURL(""))) return false;
+    selfTest().then(sendResponse, (error) =>
+      sendResponse({ steps: [{ name: "הבדיקה קרסה", ok: false, detail: String(error?.message ?? error) }] })
+    );
+    return true;
   }
 
   if (message?.type === MSG.TAB_STATE) {
