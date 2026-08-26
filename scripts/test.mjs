@@ -9,14 +9,17 @@ import {
   riskScore,
   isAllowlisted,
   parseHostname,
+  parseHostnames,
   parseKeywords,
   toMatchPattern,
   migrate,
+  BOUNDS,
   SETTINGS,
   SENSITIVITY_PRESETS,
   DEFAULT_KEYWORDS
 } from "../src/shared/settings.js";
 import { compileKeywords, matchesKeyword, normalizeText } from "../src/shared/keywords.js";
+import { isFetchableUrl } from "../src/shared/urls.js";
 
 let passed = 0;
 const failures = [];
@@ -114,10 +117,49 @@ check("drops empty entries", parseKeywords("a,,  ,b"), ["a", "b"]);
 check("v1 strict maps to a threshold", migrate({ sensitivity: "strict" }).threshold, SENSITIVITY_PRESETS.strict);
 check("v1 balanced maps to a threshold", migrate({ sensitivity: "balanced" }).threshold, SENSITIVITY_PRESETS.balanced);
 check("an explicit threshold wins over v1", migrate({ sensitivity: "strict", threshold: 0.9 }).threshold, 0.9);
-check("out-of-range threshold is clamped", migrate({ threshold: 99 }).threshold, 0.99);
+check("out-of-range threshold is clamped", migrate({ threshold: 99 }).threshold, BOUNDS.threshold[1]);
+check("a below-range threshold is clamped", migrate({ threshold: 0 }).threshold, SETTINGS.threshold);
+check("the slider's range is the stored range", BOUNDS.threshold, [0.2, 0.95]);
 check("garbage threshold falls back", migrate({ threshold: "nope" }).threshold, SENSITIVITY_PRESETS.balanced);
 check("non-array keywords are replaced", migrate({ keywords: "porn" }).keywords, []);
 check("defaults survive an empty store", migrate({}).keywords, DEFAULT_KEYWORDS);
+
+// Storage is synced across profiles and written by whichever version got there first, so
+// migrate has to sanitize entry by entry — not just check the type of the list.
+check("stored keywords are normalized", migrate({ keywords: [" NSFW ", "nsfw", ""] }).keywords, ["nsfw"]);
+check("stored keywords drop non-strings", migrate({ keywords: ["ok", null, 7] }).keywords, ["ok", "7"]);
+check("stored allowlist is normalized", migrate({ allowlist: ["HTTPS://Example.com/x"] }).allowlist, ["example.com"]);
+// The one that matters: an empty entry makes toMatchPattern emit `*:///*`, which Chrome
+// rejects — taking the whole pre-blur registration down with it, silently.
+check("an unusable allowlist entry is dropped", migrate({ allowlist: ["", "example.com", "!!"] }).allowlist, ["example.com"]);
+check("allowlist entries are deduped", migrate({ allowlist: ["a.com", "www.A.com/", "a.com"] }).allowlist, ["a.com", "www.a.com"]);
+check("parses an allowlist textarea", parseHostnames("example.com\nhttps://b.org/x, !!\n"), ["example.com", "b.org"]);
+
+/* ---------------------------------------------------------------- fetchable URLs */
+
+group("fetchable urls");
+check("an ordinary image URL is fetchable", isFetchableUrl("https://cdn.example.com/a.jpg"), true);
+check("plain http is fetchable", isFetchableUrl("http://example.com/a.jpg"), true);
+check("a data URL carries its own bytes", isFetchableUrl("data:image/png;base64,iVBOR"), true);
+
+// The extension fetches with host permissions, so it is not bound by the CORS and
+// Private Network Access rules that stop the page itself reaching these.
+check("localhost is refused", isFetchableUrl("http://localhost:3000/a.png"), false);
+check("loopback is refused", isFetchableUrl("http://127.0.0.1/a.png"), false);
+check("decimal loopback is refused", isFetchableUrl("http://2130706433/a.png"), false);
+check("a LAN address is refused", isFetchableUrl("http://192.168.1.1/logo.png"), false);
+check("a 10/8 address is refused", isFetchableUrl("http://10.0.0.5/a.png"), false);
+check("a 172.16/12 address is refused", isFetchableUrl("http://172.20.0.1/a.png"), false);
+check("172.32 is public and stays fetchable", isFetchableUrl("http://172.32.0.1/a.png"), true);
+check("link-local is refused", isFetchableUrl("http://169.254.169.254/latest/meta-data"), false);
+check("a .local name is refused", isFetchableUrl("http://printer.local/a.png"), false);
+check("IPv6 loopback is refused", isFetchableUrl("http://[::1]/a.png"), false);
+check("IPv6 unique-local is refused", isFetchableUrl("http://[fd00::1]/a.png"), false);
+check("a public IPv6 address stays fetchable", isFetchableUrl("http://[2606:4700::1]/a.png"), true);
+
+check("blob URLs are never fetched here", isFetchableUrl("blob:https://example.com/abc"), false);
+check("file URLs are refused", isFetchableUrl("file:///C:/x.png"), false);
+check("junk is refused", isFetchableUrl("not a url"), false);
 
 /* ---------------------------------------------------------------------- videos */
 

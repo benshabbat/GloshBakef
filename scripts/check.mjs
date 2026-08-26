@@ -10,9 +10,14 @@ import { transform } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const problems = [];
+let missingBuild = false;
 
 function requireFile(path, why) {
-  if (!existsSync(join(root, path))) problems.push(`${why}: missing ${path}`);
+  if (existsSync(join(root, path))) return;
+  // `dist/` is generated and gitignored, so on a fresh clone these are the first paths to
+  // fail — and "missing dist/content.js" reads like a broken repo rather than a missing step.
+  if (path.replace(/\\/g, "/").startsWith("dist/")) missingBuild = true;
+  else problems.push(`${why}: missing ${path}`);
 }
 
 /* ------------------------------------------------------------------- manifest */
@@ -48,9 +53,7 @@ for (const page of [manifest.action.default_popup, manifest.options_page, "src/o
   const html = readFileSync(join(root, page), "utf8");
   for (const [, asset] of html.matchAll(/(?:src|href)="([^"#:]+)"/g)) {
     const target = resolve(join(root, dirname(page)), asset);
-    if (!existsSync(target)) {
-      problems.push(`${page}: references missing ${posix.normalize(relative(root, target).replace(/\\/g, "/"))}`);
-    }
+    requireFile(posix.normalize(relative(root, target).replace(/\\/g, "/")), `referenced by ${page}`);
   }
 }
 
@@ -74,9 +77,12 @@ for (const file of [...walk("src"), ...walk("scripts")]) {
 
 /* ------------------------------------------------------------------- verdict */
 
+if (missingBuild) {
+  console.error("check failed: the bundles in dist/ are missing. Run `npm run build` first.");
+}
 if (problems.length) {
   console.error("check failed:");
   for (const problem of problems) console.error(`  - ${problem}`);
-  process.exit(1);
 }
+if (missingBuild || problems.length) process.exit(1);
 console.log("check passed: manifest paths, page assets and syntax are all fine.");

@@ -1,12 +1,13 @@
 import {
   SETTINGS,
   STATS,
+  BOUNDS,
   DEFAULT_KEYWORDS,
   readSettings,
   readStats,
   writeSettings,
   parseKeywords,
-  parseHostname
+  parseHostnames
 } from "../shared/settings.js";
 
 const TOGGLES = [
@@ -20,11 +21,8 @@ const TOGGLES = [
   "pauseBlockedVideos"
 ];
 
-/** id -> [min, max], for the plain integer inputs. */
-const NUMBERS = {
-  minImageSize: [0, 1000],
-  videoSampleSeconds: [1, 60]
-};
+/** The plain integer inputs. Their ranges come from BOUNDS, the same ones `migrate` clamps to. */
+const NUMBERS = ["minImageSize", "videoSampleSeconds"];
 
 const el = (id) => document.querySelector(`#${id}`);
 const status = el("status");
@@ -48,17 +46,21 @@ function fill(settings) {
   for (const id of TOGGLES) el(id).checked = Boolean(settings[id]);
   el("threshold").value = settings.threshold;
   el("threshold-value").textContent = settings.threshold.toFixed(2);
-  for (const id of Object.keys(NUMBERS)) el(id).value = settings[id];
+  for (const id of NUMBERS) el(id).value = settings[id];
   el("keywords").value = settings.keywords.join(", ");
   el("allowlist").value = settings.allowlist.join("\n");
 }
 
+const number = (value) => value.toLocaleString("he-IL");
+
 async function refreshStats() {
   const stats = await readStats();
-  // Counts checks, not elements: a playing video is checked again every few seconds.
+  // Counts model runs, not elements and not decisions: a repeat sighting of the same
+  // image is answered from the cache and never reaches the model, while a playing video
+  // is sampled afresh every few seconds.
   el("stats").textContent = stats.analyzedTotal
-    ? `בוצעו ${stats.analyzedTotal.toLocaleString("he-IL")} בדיקות תוכן, ומתוכן ${stats.blockedTotal.toLocaleString("he-IL")} הובילו להסתרה.`
-    : "עדיין לא בוצעו בדיקות תוכן.";
+    ? `המודל הורץ ${number(stats.analyzedTotal)} פעמים, ו־${number(stats.blockedTotal)} מההרצות הובילו להסתרה. תמונה שכבר נבדקה נענית מהזיכרון ואינה נספרת שוב.`
+    : "המודל עוד לא הורץ.";
 }
 
 /** Textareas save while typing, but only once the user pauses. */
@@ -74,12 +76,22 @@ for (const id of TOGGLES) {
   el(id).addEventListener("change", () => save({ [id]: el(id).checked }));
 }
 
+/** Drives the input's own range from BOUNDS, so the two can never drift apart. */
+function bind(id) {
+  const [min, max] = BOUNDS[id];
+  el(id).min = min;
+  el(id).max = max;
+  return [min, max];
+}
+
+bind("threshold");
 el("threshold").addEventListener("input", () => {
   el("threshold-value").textContent = Number(el("threshold").value).toFixed(2);
 });
 el("threshold").addEventListener("change", () => save({ threshold: Number(el("threshold").value) }));
 
-for (const [id, [min, max]] of Object.entries(NUMBERS)) {
+for (const id of NUMBERS) {
+  const [min, max] = bind(id);
   el(id).addEventListener("change", () => {
     // Snap the box back to what was actually stored, so it never shows a rejected value.
     const value = Math.max(min, Math.min(max, Math.round(Number(el(id).value) || min)));
@@ -95,13 +107,7 @@ el("keywords").addEventListener(
 
 el("allowlist").addEventListener(
   "input",
-  debounce(() => {
-    const hosts = el("allowlist")
-      .value.split(/[\n,]/)
-      .map(parseHostname)
-      .filter(Boolean);
-    save({ allowlist: [...new Set(hosts)] });
-  })
+  debounce(() => save({ allowlist: parseHostnames(el("allowlist").value) }))
 );
 
 // Drop anything that did not parse as a hostname, so the box always shows what is stored.
