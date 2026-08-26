@@ -15,6 +15,10 @@ All names live in [src/shared/messages.js](../../../src/shared/messages.js). Nev
 | `TAB_STATE` | popup → worker | `{ blocked }`, sync |
 | `REVEAL_ALL` | popup → content script (all frames) | none |
 
+`SCORE` carries `{ url }` plus three optional flags: `dataUrl` (pixels already snapshotted, skips the fetch), `cache: false` (a video frame — do not key this verdict by URL) and `pixelsOnly: true` (a `blob:` URL — answer from cache or ask for pixels, but never fetch).
+
+**A page's frame is a sender too.** `sender.tab` is set for anything a content script sends and absent for the popup, the options page and the offscreen document — so a handler that acts on a tab the *message* names, rather than the one the sender is in, must check it. `TAB_STATE` does; without that check any page on the web could read another tab's blocked count.
+
 ## The routing rule that is easy to get wrong
 
 `chrome.runtime.sendMessage` broadcasts to **every extension context that has a listener** — the service worker, the offscreen document, an open popup, an open options page. It does **not** reach content scripts; those are addressed only with `chrome.tabs.sendMessage(tabId, …)`.
