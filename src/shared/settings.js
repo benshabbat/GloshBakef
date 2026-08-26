@@ -49,6 +49,17 @@ export const STATS = {
   analyzedTotal: 0
 };
 
+/**
+ * The accepted range of every numeric setting, in one place. `migrate` clamps to it and
+ * the options page drives its own inputs from it, so a bound can never be widened in the
+ * UI without the store agreeing — or narrowed in the store without the UI following.
+ */
+export const BOUNDS = {
+  threshold: [0.2, 0.95],
+  minImageSize: [0, 1000],
+  videoSampleSeconds: [1, 60]
+};
+
 const HOST_PATTERN = /^[a-z0-9.-]+$/;
 
 export async function readSettings() {
@@ -67,27 +78,36 @@ export async function readStats() {
 /**
  * v1 stored `sensitivity: "strict" | "balanced"`. Map it onto the numeric threshold
  * so upgrading users keep the strictness they chose.
+ *
+ * Everything that comes out of storage is treated as untrusted: it is synced across
+ * profiles and written by whichever version of the extension got there first. The list
+ * fields are re-parsed entry by entry rather than merely type-checked — a single unusable
+ * hostname is enough to make `toMatchPattern` produce an invalid match pattern, which
+ * makes the whole pre-blur registration fail and silently disables "hide until checked".
  */
 export function migrate(stored) {
   const settings = { ...SETTINGS, ...stored };
   if (stored.sensitivity && stored.threshold === undefined) {
     settings.threshold = SENSITIVITY_PRESETS[stored.sensitivity] ?? SETTINGS.threshold;
   }
-  settings.threshold = clamp(Number(settings.threshold) || SETTINGS.threshold, 0.2, 0.99);
-  settings.minImageSize = clamp(Math.round(Number(settings.minImageSize) || 0), 0, 1000);
+  settings.threshold = clampTo("threshold", Number(settings.threshold) || SETTINGS.threshold);
+  settings.minImageSize = clampTo("minImageSize", Math.round(Number(settings.minImageSize) || 0));
   // A zero here would busy-loop the sampler, so it falls back to the default rather than to 0.
-  settings.videoSampleSeconds = clamp(
-    Math.round(Number(settings.videoSampleSeconds) || SETTINGS.videoSampleSeconds),
-    1,
-    60
+  settings.videoSampleSeconds = clampTo(
+    "videoSampleSeconds",
+    Math.round(Number(settings.videoSampleSeconds) || SETTINGS.videoSampleSeconds)
   );
-  settings.keywords = Array.isArray(settings.keywords) ? settings.keywords : [];
-  settings.allowlist = Array.isArray(settings.allowlist) ? settings.allowlist : [];
+  settings.keywords = sanitizeList(settings.keywords, normalizeKeyword);
+  settings.allowlist = sanitizeList(settings.allowlist, parseHostname);
   return settings;
 }
 
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function clampTo(field, value) {
+  return clamp(value, ...BOUNDS[field]);
 }
 
 /**
@@ -109,12 +129,31 @@ export function onSettingsChanged(listener) {
   });
 }
 
+/**
+ * Split on commas and newlines, run every entry through `normalize`, drop what it
+ * rejects and de-duplicate. The keyword box, the allowlist box and `migrate` all want
+ * exactly this and differ only in the normalizer.
+ */
+export function parseList(text, normalize) {
+  return sanitizeList(String(text ?? "").split(/[,\n]/), normalize);
+}
+
+/** The array form of `parseList`, for values that are already a list. */
+function sanitizeList(list, normalize) {
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.map(normalize).filter(Boolean))];
+}
+
+function normalizeKeyword(word) {
+  return String(word ?? "").trim().toLowerCase();
+}
+
 export function parseKeywords(text) {
-  const list = text
-    .split(/[,\n]/)
-    .map((word) => word.trim().toLowerCase())
-    .filter(Boolean);
-  return [...new Set(list)];
+  return parseList(text, normalizeKeyword);
+}
+
+export function parseHostnames(text) {
+  return parseList(text, parseHostname);
 }
 
 export function parseHostname(input) {

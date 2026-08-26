@@ -6,6 +6,7 @@ import {
   STATS
 } from "../shared/settings.js";
 import { MSG, UNKNOWN_SCORE } from "../shared/messages.js";
+import { isFetchableUrl } from "../shared/urls.js";
 
 const OFFSCREEN_URL = "src/offscreen/offscreen.html";
 const PREBLUR_SCRIPT_ID = "imgfilter-preblur";
@@ -122,8 +123,12 @@ async function runModel(url, dataUrl, attempt = 0) {
  * `cache: false` is what a video frame asks for: the picture behind that URL changes from
  * one sample to the next, so caching it by URL would answer the next question with the
  * previous frame's verdict.
+ *
+ * `pixelsOnly: true` says the caller knows this URL is unfetchable from here — a `blob:`
+ * URL that only resolves inside its own page. It still gets a cache lookup, which is the
+ * point: without one, every `blob:` image would re-run the model after any settings change.
  */
-async function scoreImage({ url, dataUrl, cache = true }) {
+async function scoreImage({ url, dataUrl, cache = true, pixelsOnly = false }) {
   const settings = await getSettings();
 
   if (!dataUrl && cache) {
@@ -133,6 +138,13 @@ async function scoreImage({ url, dataUrl, cache = true }) {
         ? { score: riskScore(cached, settings) }
         : { score: UNKNOWN_SCORE, needsPixels: true };
     }
+  }
+
+  // Nothing cached and no pixels attached, so this would become a fetch. Only URLs we are
+  // willing to request on the page's behalf get that far; the rest are sent back for
+  // pixels, which reaches the same picture without the extension touching the network.
+  if (!dataUrl && (pixelsOnly || !isFetchableUrl(url))) {
+    return { score: UNKNOWN_SCORE, needsPixels: true };
   }
 
   const classes = await enqueue(() => runModel(url, dataUrl));
@@ -158,17 +170,27 @@ async function scoreImage({ url, dataUrl, cache = true }) {
  * Serialised so concurrent flushes cannot lose an increment to a read-modify-write race.
  */
 const pending = { analyzedTotal: 0, blockedTotal: 0 };
+const STATS_FLUSH_MS = 5000;
+/** Cap on how many increments a worker suspend can swallow before they are written. */
+const STATS_FLUSH_AFTER = 50;
 let statsChain = Promise.resolve();
 let statsTimer;
 
 function recordStats(score, settings) {
   pending.analyzedTotal += 1;
   if (score >= settings.threshold) pending.blockedTotal += 1;
+  // Flush on volume as well as on time: during a burst the timer keeps being pushed out,
+  // which is exactly when a suspend would cost the most.
+  if (pending.analyzedTotal >= STATS_FLUSH_AFTER) {
+    flushStats();
+    return;
+  }
   clearTimeout(statsTimer);
-  statsTimer = setTimeout(flushStats, 5000);
+  statsTimer = setTimeout(flushStats, STATS_FLUSH_MS);
 }
 
 function flushStats() {
+  clearTimeout(statsTimer);
   const delta = { ...pending };
   if (!delta.analyzedTotal) return;
   pending.analyzedTotal = 0;
@@ -233,7 +255,9 @@ async function syncPreblur(settings) {
   const action = registered.length
     ? chrome.scripting.updateContentScripts([definition])
     : chrome.scripting.registerContentScripts([definition]);
-  await action.catch(() => {});
+  // Chrome rejects the whole call over one malformed exclude pattern, and the symptom is
+  // "hide until checked" quietly doing nothing. Swallowing that silently hides the cause.
+  await action.catch((error) => console.warn("[imgfilter] pre-blur registration failed:", error));
 }
 
 /* ------------------------------------------------------------------- wiring it up */
@@ -252,6 +276,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === MSG.TAB_STATE) {
+    // Only the popup may ask about a tab it names. A content script — which is to say any
+    // page on the web — has `sender.tab`, and has no business reading another tab's count.
+    if (sender.tab) return false;
     sendResponse({ blocked: tabTotal(message.tabId) });
     return false;
   }
@@ -269,8 +296,8 @@ chrome.tabs.onRemoved.addListener((tabId) => tabCounts.delete(tabId));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== IDLE_ALARM) return;
-  // The alarm is the durable timer: a worker suspend can eat the setTimeout above, so
-  // the minute tick is what guarantees buffered counters eventually land.
+  // The alarm is the durable timer: a worker suspend can eat the setTimeout above, so the
+  // minute tick bounds how long a buffered counter can sit unwritten while the worker lives.
   flushStats();
   closeOffscreenIfIdle();
 });

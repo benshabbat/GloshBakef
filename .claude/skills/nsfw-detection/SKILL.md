@@ -62,9 +62,13 @@ Presets in `SENSITIVITY_PRESETS`: `relaxed` 0.85, `balanced` 0.7, `strict` 0.5. 
 Two tiers, because one alone does not cover the web:
 
 1. **The offscreen document fetches the URL itself.** Extension pages hold `host_permissions`, so this is not subject to page CORS. `cache: "force-cache"` means it almost always hits bytes the browser already has. It then decodes at 224×224 via `createImageBitmap`'s resize options, which is the model input size, so nsfwjs skips its own resize.
-2. **Fallback: the content script draws the element to a canvas** and sends a 224×224 JPEG data URL. This covers same-origin, CORS-clean, `blob:` and `data:` images that the extension origin cannot fetch — auth-gated CDNs, SPA object URLs. `blob:` skips tier 1 entirely since those URLs only resolve inside the page.
+2. **Fallback: the content script draws the element to a canvas** and sends a 224×224 JPEG data URL. This covers same-origin, CORS-clean, `blob:` and `data:` images that the extension origin cannot fetch — auth-gated CDNs, SPA object URLs.
 
 A tier-1 miss is cached as `null`, so the next sighting of that URL goes straight to tier 2.
+
+**Not every URL is allowed to become a tier-1 fetch.** `isFetchableUrl()` in [src/shared/urls.js](../../../src/shared/urls.js) gates it: `http`/`https`/`data` only, and no loopback, LAN, link-local or `.local` host. The URL comes out of page markup and the extension fetches it with host permissions, so without the gate a hostile page could point an `<img>` at the user's router and have the extension make the request for it — something the page's own CORS and Private Network Access rules stop it doing. A refused URL costs no coverage: it falls through to tier 2, where the source is the element the page already decoded.
+
+**`blob:` uses `pixelsOnly: true`.** Those URLs only resolve inside their own page, so tier 1 must never try to fetch one — but the request still goes to the worker, because the worker's cache is keyed by URL and holds the classes from the last pixel run. Skipping the worker entirely (as this used to) meant every `blob:` image re-ran the model after any settings change.
 
 ## Videos
 
