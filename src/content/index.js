@@ -155,7 +155,8 @@ function restorePlayback(element) {
   originalPlayback.delete(element);
   element.muted = original.muted;
   // Autoplay policy can refuse this outside a user gesture; the frame is visible either way.
-  if (!original.paused) element.play().catch(() => {});
+  // A detached element is skipped: this also runs while cleaning up removed nodes.
+  if (!original.paused && element.isConnected) element.play().catch(() => {});
 }
 
 function unblock(element, status) {
@@ -184,16 +185,24 @@ function reset(element) {
 
 /* ------------------------------------------------------------- the state machine */
 
-function evaluate(element) {
+/**
+ * `force` is for callers that know the picture changed while the source string did not —
+ * a finished load, or an MSE swap that replaces the movie behind an unchanged `src`.
+ */
+function evaluate(element, force = false) {
   if (!state.active || !isMedia(element)) return;
 
   const src = sourceOf(element);
   const record = records.get(element);
 
   // Re-run only when the effective source actually changed (SPAs swap src constantly).
-  if (record && record.src === src && record.status !== "pending") return;
-  if (!record || record.src !== src) {
-    records.set(element, { src, status: "pending", sampledAt: 0, misses: 0 });
+  if (!force && record && record.src === src && record.status !== "pending") return;
+  if (force || !record || record.src !== src) {
+    // The miss counter survives a same-source re-evaluation. Without that, a DRM video
+    // that keeps firing `loadeddata` would reset it forever and never reach the give-up
+    // point that MAX_VIDEO_MISSES exists to enforce.
+    const misses = record && record.src === src ? record.misses : 0;
+    records.set(element, { src, status: "pending", sampledAt: 0, misses });
   }
 
   if (hasBlockedKeyword(element)) {
@@ -269,9 +278,7 @@ function waitForLoad(element) {
   };
   const done = () => {
     detach();
-    const record = records.get(element);
-    if (record) record.src = null; // force a fresh evaluation
-    evaluate(element);
+    evaluate(element, true);
   };
   const failed = () => {
     detach();
@@ -324,6 +331,16 @@ async function requestScore(payload) {
   }
 }
 
+/**
+ * Is this element still waiting for the verdict we went away to fetch? It may have been
+ * swapped, torn down, revealed by the user, or reset by a settings change while the model
+ * was running — and in every one of those cases the answer we came back with is stale.
+ */
+function stillPending(element, src) {
+  const record = records.get(element);
+  return state.active && record?.src === src && record.status === "pending";
+}
+
 async function score(element) {
   if (isVideo(element)) {
     await scoreVideo(element);
@@ -336,17 +353,17 @@ async function score(element) {
     return;
   }
 
-  // blob: URLs only resolve inside this page, so go straight to the pixel path.
-  let result = src.startsWith("blob:")
-    ? { score: UNKNOWN_SCORE, needsPixels: true }
-    : await requestScore({ url: src });
+  // A blob: URL only resolves inside this page, so the worker must not try to fetch it —
+  // but it can still answer from its cache, which is what keeps a settings change from
+  // re-running the model on every blob: image on the page.
+  let result = await requestScore({ url: src, pixelsOnly: src.startsWith("blob:") });
 
   if (result.needsPixels) {
     const dataUrl = snapshot(element);
     result = dataUrl ? await requestScore({ url: src, dataUrl }) : { score: UNKNOWN_SCORE };
   }
 
-  if (!state.active || records.get(element)?.src !== src) return;
+  if (!stillPending(element, src)) return;
 
   if ((result.score ?? UNKNOWN_SCORE) >= state.settings.threshold) block(element);
   else allow(element);
@@ -360,7 +377,7 @@ async function scoreVideo(element) {
   const src = sourceOf(element);
   const value = await sampleVideo(element);
 
-  if (!state.active || records.get(element)?.src !== src) return;
+  if (!stillPending(element, src)) return;
 
   if (value >= state.settings.threshold) {
     block(element);
@@ -415,15 +432,25 @@ async function sampleVideo(element) {
  * CORS-clean, `blob:` and `data:` images and videos — including the MSE streams the big
  * video sites use — and throws for tainted ones, which we treat as "cannot inspect".
  */
+let snapshotCanvas = null;
+
 function snapshot(element) {
+  const canvas = snapshotCanvas ?? Object.assign(document.createElement("canvas"), {
+    width: SNAPSHOT_SIZE,
+    height: SNAPSHOT_SIZE
+  });
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = SNAPSHOT_SIZE;
-    canvas.height = SNAPSHOT_SIZE;
     const context = canvas.getContext("2d", { willReadFrequently: false });
+    // Reused canvas: wipe it, or a source drawn with transparency shows the last image through.
+    context.clearRect(0, 0, SNAPSHOT_SIZE, SNAPSHOT_SIZE);
     context.drawImage(element, 0, 0, SNAPSHOT_SIZE, SNAPSHOT_SIZE);
-    return canvas.toDataURL("image/jpeg", 0.75);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+    // Only a canvas that exported cleanly is kept. A tainted one stays tainted for the
+    // rest of its life, so reusing it would poison every image that followed.
+    snapshotCanvas = canvas;
+    return dataUrl;
   } catch {
+    snapshotCanvas = null;
     return null;
   }
 }
@@ -440,11 +467,7 @@ function watchVideo(element) {
   });
   element.addEventListener("seeked", () => resample(element));
   // MSE and <source> swaps replace the movie while every attribute stays as it was.
-  element.addEventListener("emptied", () => {
-    const record = records.get(element);
-    if (record) record.src = null;
-    evaluate(element);
-  });
+  element.addEventListener("emptied", () => evaluate(element, true));
 }
 
 /** Keeps a cleared video under review for as long as it is on screen. */
@@ -529,7 +552,33 @@ function scan(root) {
   if (root.querySelectorAll) {
     for (const element of root.querySelectorAll("img, video")) evaluate(element);
   }
-  scheduleBackgroundScan();
+}
+
+/**
+ * Forgets a subtree that has left the document. Nothing else does this, and without it
+ * the IntersectionObserver — which holds its targets strongly — plus `liveVideos` keep
+ * every video an infinite feed ever showed alive for the lifetime of the page.
+ */
+function forget(root) {
+  if (isMedia(root)) release(root);
+  if (root.querySelectorAll) {
+    for (const element of root.querySelectorAll("img, video")) release(element);
+  }
+}
+
+function release(element) {
+  // A move arrives as a removal followed by an insertion, and by the time the observer
+  // callback runs the node is already back in the document. Only real removals count.
+  if (!element.isConnected) reset(element);
+}
+
+/** Every element this frame has tagged, media and CSS-background layers alike. */
+function tagged(value = "") {
+  const suffix = value ? `="${value}"` : "";
+  return [
+    ...document.querySelectorAll(`[${ATTR}${suffix}]`),
+    ...document.querySelectorAll(`[${BG_ATTR}${suffix}]`)
+  ];
 }
 
 function scheduleReport() {
@@ -544,19 +593,28 @@ function scheduleReport() {
 function onClickCapture(event) {
   if (!state.active || !state.settings.clickToReveal) return;
   const element = event.target;
-  if (!isMedia(element) || element.getAttribute(ATTR) !== "blocked") return;
+  if (!isMedia(element)) return;
+
+  // `pending` counts as hidden while "hide until checked" is on: preblur.css blurs it
+  // exactly like a blocked one, and an element that never finishes loading would
+  // otherwise stay blurred with no way for the user out of it. Any other state — safe,
+  // revealed, or never evaluated at all — is left to the page's own click handling.
+  const status = element.getAttribute(ATTR);
+  const hidden = status === "blocked" || (status === "pending" && state.settings.hideUntilChecked);
+  if (!hidden) return;
+
   event.preventDefault();
   event.stopImmediatePropagation();
   unblock(element, "revealed");
 }
 
 function revealAll() {
-  for (const element of document.querySelectorAll(`[${ATTR}="blocked"]`)) {
-    unblock(element, "revealed");
-  }
-  for (const element of document.querySelectorAll(`[${BG_ATTR}="blocked"]`)) {
-    element.setAttribute(BG_ATTR, "revealed");
-    state.blocked = Math.max(0, state.blocked - 1);
+  for (const element of tagged("blocked")) {
+    if (element.getAttribute(ATTR) === "blocked") unblock(element, "revealed");
+    if (element.getAttribute(BG_ATTR) === "blocked") {
+      element.setAttribute(BG_ATTR, "revealed");
+      state.blocked = Math.max(0, state.blocked - 1);
+    }
   }
   scheduleReport();
 }
@@ -569,16 +627,49 @@ function stopVideoSampling() {
   liveVideos.clear();
 }
 
-function teardown() {
-  document.documentElement?.setAttribute(OFF_ATTR, "true");
-  for (const element of document.querySelectorAll(`[${ATTR}]`)) reset(element);
-  for (const element of document.querySelectorAll(`[${BG_ATTR}]`)) element.removeAttribute(BG_ATTR);
+/** Puts the page back the way it was found, verdict-wise, and forgets everything. */
+function clearAllVerdicts() {
+  for (const element of tagged()) {
+    if (element.hasAttribute(ATTR)) reset(element);
+    element.removeAttribute(BG_ATTR);
+  }
   stopVideoSampling();
   state.blocked = 0;
+}
+
+function teardown() {
+  // Disconnected, not merely ignored: on an allowlisted site the observer would otherwise
+  // keep walking every added subtree for the lifetime of the page, for verdicts that are
+  // never reached — a permanent cost on exactly the sites asked to be left alone.
+  domObserver?.disconnect();
+  document.documentElement?.setAttribute(OFF_ATTR, "true");
+  clearAllVerdicts();
   scheduleReport();
 }
 
+/**
+ * Settings whose value can change a verdict that was already reached. The rest —
+ * `clickToReveal`, `hideUntilChecked`, `videoSampleSeconds` — decide what happens next,
+ * not what was decided, so flipping one is no reason to re-score the page.
+ */
+const SCORING_FIELDS = [
+  "threshold",
+  "keywords",
+  "analyzeContent",
+  "includeSuggestive",
+  "minImageSize",
+  "analyzeVideos",
+  "scanBackgrounds",
+  "pauseBlockedVideos"
+];
+
+function affectsVerdicts(previous, next) {
+  if (!previous) return true;
+  return SCORING_FIELDS.some((field) => JSON.stringify(previous[field]) !== JSON.stringify(next[field]));
+}
+
 function applySettings(settings) {
+  const previous = state.settings;
   const wasActive = state.active;
   state.settings = settings;
   state.keywordPattern = compileKeywords(settings.keywords);
@@ -590,44 +681,76 @@ function applySettings(settings) {
   }
 
   document.documentElement?.removeAttribute(OFF_ATTR);
-  // A settings change invalidates every earlier verdict, so start from a clean slate.
+  observeDom();
+
   if (wasActive) {
-    for (const element of document.querySelectorAll(`[${ATTR}]`)) reset(element);
-    for (const element of document.querySelectorAll(`[${BG_ATTR}]`)) element.removeAttribute(BG_ATTR);
-    stopVideoSampling();
-    state.blocked = 0;
+    if (!affectsVerdicts(previous, settings)) return;
+    clearAllVerdicts(); // the change invalidated every earlier verdict
   }
   scan(document);
+  scheduleBackgroundScan();
 }
 
-function start() {
-  viewportObserver = new IntersectionObserver(onVisible, { rootMargin: VIEWPORT_MARGIN });
-
-  domObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === "attributes") {
-        evaluate(mutation.target);
-        continue;
-      }
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType === Node.ELEMENT_NODE) scan(node);
-      }
-    }
-  });
-  // At document_start the document element usually exists, but not on every document type.
+/** At document_start the document element usually exists, but not on every document type. */
+function observeDom() {
   domObserver.observe(document.documentElement ?? document, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ["src", "srcset", "poster", "alt", "title"]
   });
+}
+
+function onMutations(mutations) {
+  if (!state.active) return;
+  const before = state.blocked;
+  let structural = false;
+
+  for (const mutation of mutations) {
+    if (mutation.type === "attributes") {
+      evaluate(mutation.target);
+      continue;
+    }
+    for (const node of mutation.removedNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) forget(node);
+    }
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) scan(node);
+    }
+    structural = true;
+  }
+
+  // Once per batch rather than once per added node: a page that inserts a thousand nodes
+  // at a time would otherwise churn a thousand timers to schedule the one scan.
+  if (structural) scheduleBackgroundScan();
+  if (state.blocked !== before) scheduleReport();
+}
+
+function start() {
+  viewportObserver = new IntersectionObserver(onVisible, { rootMargin: VIEWPORT_MARGIN });
+  domObserver = new MutationObserver(onMutations);
 
   document.addEventListener("click", onClickCapture, { capture: true });
+
+  // The worker cannot see an iframe go away, so a frame that leaves would otherwise leave
+  // its share of the badge count behind for as long as the tab stays on the same page.
+  // `persisted` means the frame is only going into the back/forward cache with its
+  // verdicts intact, so it reports again on the way back rather than zeroing itself out.
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted && state.blocked) {
+      chrome.runtime.sendMessage({ type: MSG.REPORT, count: 0 }).catch(() => {});
+    }
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) scheduleReport();
+  });
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === MSG.REVEAL_ALL) revealAll();
   });
 
+  // `applySettings` connects the DOM observer, and its own `scan(document)` covers
+  // everything that appeared before the first settings read resolved.
   onSettingsChanged(applySettings);
   readSettings().then(applySettings);
 }
